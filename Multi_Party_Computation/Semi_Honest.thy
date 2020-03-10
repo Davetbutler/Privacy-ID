@@ -12,7 +12,6 @@ locale semi_honest_prob =
     and valid_inputs :: "'inputs \<Rightarrow> bool"
     and extract_input :: "'inputs \<Rightarrow> 'ith_input"
     and extract_output :: "'outputs \<Rightarrow> 'ith_output"
-    and D :: "'view \<Rightarrow> bool spmf" \<comment> \<open>the distinguisher that tries to distinguish the real and ideal views\<close>
   assumes "lossless_spmf (D view)" \<comment> \<open>D must be lossless, this is reasonable as the distinguisher is only used to define security, and is not an adversary\<close>
 begin
 
@@ -49,13 +48,11 @@ locale semi_honest_det_security =
   fixes funct :: "'input list \<Rightarrow> ('output list) spmf"
     and real_view :: "'input list \<Rightarrow> 'view spmf" \<comment> \<open>the real view of the ith party\<close>
     and ideal_view :: "'input \<Rightarrow> 'output \<Rightarrow> 'view spmf"
-    and valid_inputs :: "'input list \<Rightarrow> bool"
-    and D :: "'view \<Rightarrow> bool spmf" \<comment> \<open>the distinguisher that tries to distinguish the real and ideal views\<close>
-  assumes "lossless_spmf (D view)" \<comment> \<open>D must be lossless, this is reasonable as the distinguisher is only used to define security, and is not an adversary\<close>
+    and valid_inputs :: "'input list \<Rightarrow> bool" \<comment> \<open>D must be lossless, this is reasonable as the distinguisher is only used to define security, and is not an adversary\<close>
 begin
 
-definition advantage :: "'input list \<Rightarrow> real"
-  where "advantage inputs \<equiv> \<bar>spmf (real_view inputs \<bind> D) True 
+definition advantage :: "'input list \<Rightarrow> ('view \<Rightarrow> bool spmf) \<Rightarrow> real"
+  where "advantage inputs D \<equiv> \<bar>spmf (real_view inputs \<bind> D) True 
               - spmf (funct inputs \<bind> (\<lambda> outputs. ideal_view (nth inputs i) (nth outputs i) \<bind> D)) True\<bar>"
 
 definition "perfect_security inputs \<equiv> (valid_inputs inputs \<longrightarrow> real_view inputs = funct inputs \<bind> (\<lambda> outputs. ideal_view (nth inputs i) (nth outputs i)))"
