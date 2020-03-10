@@ -5,62 +5,68 @@ for constructing 1-out-of-n OT from 1-out-of-2 OT from \cite{DBLP:books/cu/Goldr
 properties on 1-out-of-2 OT.\<close>
 
 theory OT14 imports
-  Semi_Honest_Def
+  Semi_Honest
   OT_Functionalities
   Uniform_Sampling
 begin
+sledgehammer_params[timeout = 1000]
+datatype inputs_ot12 = M2 "(bool \<times> bool)" | C1 bool
+
+datatype outputs = P bool | U unit
+
+fun xor :: "outputs \<Rightarrow> outputs \<Rightarrow> bool"
+  where "xor (P a) (P b) = a \<oplus> b"
+
+fun f_ot12 :: "inputs_ot12 list \<Rightarrow> (outputs list) spmf"
+  where "f_ot12 [M2 (m0,m1), C1 \<sigma>] = return_spmf ([U (), if \<sigma> then (P m1) else (P m0)])"
+
+fun valid_inputs_ot12 :: "inputs_ot12 list \<Rightarrow> bool"
+  where "valid_inputs_ot12 [M2 (b0, b1), C1 \<sigma>] = True" 
+
+datatype inputs_ot14 = M4 "(bool \<times> bool \<times> bool \<times> bool)" | C2 "(bool \<times> bool)"
+
+fun f_ot14 :: "inputs_ot14 list \<Rightarrow> (outputs list) spmf"
+  where "f_ot14 [M4 (m00, m01, m10, m11), C2 (c0,c1)] 
+              = return_spmf ([U (), if c0 then (if c1 then P (m11) else (P m10)) else (if c1 then (P m01) else (P m00))])"
+
+fun valid_inputs_ot14 :: "inputs_ot14 list \<Rightarrow> bool"
+  where "valid_inputs_ot14 [M4 (m00, m01, m10, m11), C2 (c0,c1)] = True" 
 
 type_synonym input1 = "bool \<times> bool \<times> bool \<times> bool"
 type_synonym input2 = "bool \<times> bool"
-type_synonym 'v_OT121' view1 = "(input1 \<times> (bool \<times> bool \<times> bool \<times> bool \<times> bool \<times> bool) \<times> 'v_OT121' \<times> 'v_OT121' \<times> 'v_OT121')"
-type_synonym 'v_OT122' view2 = "(input2 \<times> (bool \<times> bool \<times> bool \<times> bool) \<times> 'v_OT122' \<times> 'v_OT122' \<times> 'v_OT122')"
+type_synonym 'ot12_view1' view1 = "(inputs_ot14 \<times> (bool \<times> bool \<times> bool \<times> bool \<times> bool \<times> bool) \<times> 'ot12_view1' \<times> 'ot12_view1' \<times> 'ot12_view1')"
+type_synonym 'ot12_view2' view2 = "(inputs_ot14 \<times> (bool \<times> bool \<times> bool \<times> bool) \<times> 'ot12_view2' \<times> 'ot12_view2' \<times> 'ot12_view2')"
 
-locale ot14_base = 
-  fixes S1_OT12 :: "(bool \<times> bool) \<Rightarrow> unit \<Rightarrow> 'v_OT121 spmf" \<comment> \<open>simulator for party 1 in OT12\<close>
-    and R1_OT12 :: "(bool \<times> bool) \<Rightarrow> bool \<Rightarrow> 'v_OT121 spmf" \<comment> \<open>real view for party 1 in OT12\<close>
-    and adv_OT12 :: real
-    and S2_OT12 :: "bool \<Rightarrow> bool \<Rightarrow> 'v_OT122 spmf" 
-    and R2_OT12 :: "(bool \<times> bool) \<Rightarrow> bool \<Rightarrow> 'v_OT122 spmf"
-    and protocol_OT12 :: "(bool \<times> bool) \<Rightarrow> bool \<Rightarrow> (unit \<times> bool) spmf"
-  assumes ass_adv_OT12: "sim_det_def.adv_P1 R1_OT12 S1_OT12 funct_OT12 (m0,m1) c D \<le> adv_OT12" \<comment> \<open>bound the advantage of OT12 for party 1\<close> 
-    and inf_th_OT12_P2:  "sim_det_def.perfect_sec_P2 R2_OT12 S2_OT12 funct_OT12 (m0,m1) \<sigma>" \<comment> \<open>information theoretic security for party 2\<close>
-    and correct: "protocol_OT12 msgs b = funct_OT_12 msgs b"
-    and lossless_R1_12: "lossless_spmf (R1_OT12 m c)"
-    and lossless_S1_12: "lossless_spmf (S1_OT12 m out1)"
-    and lossless_S2_12: "lossless_spmf (S2_OT12 c out2)"
-    and lossless_R2_12: "lossless_spmf (R2_OT12 M c)"
-    and lossless_funct_OT12: "lossless_spmf (funct_OT12 (m0,m1) c)"
-    and lossless_protocol_OT12: "lossless_spmf (protocol_OT12 M C)"
-    and "adv_OT12 > 0"
+locale ot14_base = ot12_1: semi_honest_det_security 0 f_ot12 R1_OT12 S1_OT12 valid_inputs_ot12 + 
+  ot12_2: semi_honest_det_security 1 f_ot12 R2_OT12 S2_OT12 valid_inputs_ot12 +
+  ot12: semi_honest_det_correctness f_ot12 protocol_ot12 valid_inputs_ot12
+  for R1_OT12 :: "inputs_ot12 list \<Rightarrow> 'ot12_view1 spmf"
+    and S1_OT12 
+    and R2_OT12 :: "inputs_ot12 list \<Rightarrow> 'ot12_view2 spmf"
+    and  S2_OT12 protocol_ot12
+    +
+  fixes ot12_adv_P1 :: real
+  assumes ot12_advantage_P1: "ot12_1.advantage [M2 (m0,m1), C1 \<sigma>] D \<le> ot12_adv_P1"
+    and ot12_perfect_security_P2: "ot12_2.perfect_security [M2 (m0,m1), C1 \<sigma>]"
+    and ot12_correct: "ot12.correctness [M2 (m0,m1), C1 \<sigma>]"
 begin
 
-sublocale OT_12_sim: sim_det_def R1_OT12 S1_OT12 R2_OT12 S2_OT12 funct_OT_12 protocol_OT12
-  unfolding sim_det_def_def 
-  by(simp add: lossless_R1_12 lossless_S1_12 lossless_funct_OT12 lossless_R2_12 lossless_S2_12)
-
-lemma OT_12_P1_assms_bound': "\<bar>spmf (bind_spmf (R1_OT12 (m0,m1) c) (\<lambda> view. ((D::'v_OT121 \<Rightarrow> bool spmf) view ))) True 
-                - spmf (bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (D view ))) True\<bar> \<le> adv_OT12"
+lemma OT_12_P1_assms_bound': "\<bar>spmf (bind_spmf (R1_OT12 [M2 (m0,m1), C1 \<sigma>]) (\<lambda> view. (D view ))) True 
+                - spmf (bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (D view))) True\<bar> \<le> ot12_adv_P1"
 proof-
-  have "sim_det_def.adv_P1 R1_OT12 S1_OT12 funct_OT_12 (m0,m1) c D =
-                      \<bar>spmf (bind_spmf (R1_OT12 (m0,m1) c) (\<lambda> view. (D view ))) True 
-                                    - spmf (funct_OT_12 (m0,m1) c \<bind> (\<lambda> ((out1::unit), (out2::bool)). 
-                                              S1_OT12 (m0,m1) out1 \<bind> (\<lambda> view. D view))) True\<bar>"
-    using sim_det_def.adv_P1_def 
-    using  OT_12_sim.adv_P1_def by auto
-  also have "... = \<bar>spmf (bind_spmf (R1_OT12 (m0,m1) c) (\<lambda> view. ((D::'v_OT121 \<Rightarrow> bool spmf) view ))) True 
-                - spmf (bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (D view ))) True\<bar>" 
-    by(simp add: funct_OT_12_def)
-  ultimately show ?thesis 
-    by(metis ass_adv_OT12)
+  have "ot12_1.advantage [M2 (m0,m1), C1 \<sigma>] D =
+                     \<bar>spmf (bind_spmf (R1_OT12 [M2 (m0,m1), C1 \<sigma>]) (\<lambda> view. (D view ))) True 
+                - spmf (bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (D view ))) True\<bar>"
+    using ot12_1.advantage_def by auto
+  thus ?thesis  
+    by(metis ot12_advantage_P1)
 qed
 
-lemma OT_12_P2_assm: "R2_OT12 (m0,m1) \<sigma> = funct_OT_12 (m0,m1) \<sigma> \<bind> (\<lambda> (out1, out2). S2_OT12 \<sigma> out2)"
-  using inf_th_OT12_P2 OT_12_sim.perfect_sec_P2_def by blast
+lemma OT_12_P2_assm: "R2_OT12 [M2 (m0,m1), C1 \<sigma>] = f_ot12 [M2 (m0,m1), C1 \<sigma>] \<bind> (\<lambda> outputs. S2_OT12 (C1 \<sigma>) (nth outputs 1))"
+  using ot12_perfect_security_P2 ot12_2.perfect_security_def by simp
 
-definition protocol_14_OT :: "input1 \<Rightarrow> input2 \<Rightarrow> (unit \<times> bool) spmf"
-  where "protocol_14_OT M C = do {
-    let (c0,c1) = C;
-    let (m00, m01, m10, m11) = M;
+fun protocol_ot14 :: "inputs_ot14 list \<Rightarrow> (outputs list) spmf"
+  where "protocol_ot14 [M4 (m00, m01, m10, m11), C2 (c0,c1)] = do {
     S0 \<leftarrow> coin_spmf;
     S1 \<leftarrow> coin_spmf;
     S2 \<leftarrow> coin_spmf;
@@ -71,143 +77,130 @@ definition protocol_14_OT :: "input1 \<Rightarrow> input2 \<Rightarrow> (unit \<
     let a1 = S0 \<oplus> S3 \<oplus> m01;
     let a2 = S1 \<oplus> S4 \<oplus> m10;
     let a3 = S1 \<oplus> S5 \<oplus> m11;
-    (_,Si) \<leftarrow> protocol_OT12 (S0, S1) c0;
-    (_,Sj) \<leftarrow> protocol_OT12 (S2, S3) c1;
-    (_,Sk) \<leftarrow> protocol_OT12 (S4, S5) c1;
-    let s2 = Si \<oplus> (if c0 then Sk else Sj) \<oplus> (if c0 then (if c1 then a3 else a2) else (if c1 then a1 else a0));
-    return_spmf ((), s2)}"
+    outputs_i :: outputs list \<leftarrow> protocol_ot12 [M2 (S0, S1), C1 c0];
+    outputs_j :: outputs list \<leftarrow> protocol_ot12 [M2 (S2, S3), C1 c1];
+    outputs_k :: outputs list \<leftarrow> protocol_ot12 [M2 (S4, S5), C1 c1];
+    let s2 = (xor (nth outputs_i 1) (if c0 then (nth outputs_k 1) else (nth outputs_j 1))) \<oplus> (if c0 then (if c1 then a3 else a2) else (if c1 then a1 else a0)) ;
+    return_spmf ([U (), P s2])}"
 
-lemma lossless_protocol_14_OT: "lossless_spmf (protocol_14_OT M C)" 
-  by(simp add: protocol_14_OT_def lossless_protocol_OT12 split_def)
+(*lemma lossless_protocol_14_OT: "lossless_spmf (protocol_14_OT M C)" 
+  by(simp add: protocol_14_OT_def lossless_protocol_OT12 split_def)*)
 
-definition R1_14 :: "input1 \<Rightarrow> input2 \<Rightarrow> 'v_OT121 view1 spmf"
-  where "R1_14 msgs choice = do {
-    let (m00, m01, m10, m11) = msgs;
-    let (c0, c1) = choice;
+fun R1_14 :: "inputs_ot14 list \<Rightarrow> 'ot12_view1 view1 spmf"
+  where "R1_14 [M4 (m00, m01, m10, m11), C2 (c0,c1)] = do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
     S2 :: bool \<leftarrow> coin_spmf;
     S3 :: bool \<leftarrow> coin_spmf;
     S4 :: bool \<leftarrow> coin_spmf;
     S5 :: bool \<leftarrow> coin_spmf;
-    a :: 'v_OT121 \<leftarrow> R1_OT12 (S0, S1) c0; 
-    b :: 'v_OT121 \<leftarrow> R1_OT12 (S2, S3) c1;
-    c :: 'v_OT121 \<leftarrow> R1_OT12 (S4, S5) c1;
-    return_spmf (msgs, (S0, S1, S2, S3, S4, S5), a, b, c)}"
+    a :: 'ot12_view1 \<leftarrow> R1_OT12 [M2 (S0, S1), C1 c0]; 
+    b :: 'ot12_view1 \<leftarrow> R1_OT12 [M2 (S2, S3), C1 c1];
+    c :: 'ot12_view1 \<leftarrow> R1_OT12 [M2 (S4, S5), C1 c1];
+    return_spmf (M4 (m00, m01, m10, m11), (S0, S1, S2, S3, S4, S5), a, b, c)}"
 
-lemma lossless_R1_14: "lossless_spmf (R1_14 msgs C)"
-  by(simp add: R1_14_def split_def lossless_R1_12)
+(*lemma lossless_R1_14: "lossless_spmf (R1_14 msgs C)"
+  by(simp add: R1_14_def split_def lossless_R1_12)*)
 
-definition R1_14_interm1 :: "input1 \<Rightarrow> input2 \<Rightarrow> 'v_OT121 view1 spmf"
-  where "R1_14_interm1 msgs choice = do {
-    let (m00, m01, m10, m11) = msgs;
-    let (c0, c1) = choice;
+fun R1_14_interm1 :: "inputs_ot14 list \<Rightarrow> 'ot12_view1 view1 spmf"
+  where "R1_14_interm1 [M4 (m00, m01, m10, m11), C2 (c0,c1)] = do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
     S2 :: bool \<leftarrow> coin_spmf;
     S3 :: bool \<leftarrow> coin_spmf;
     S4 :: bool \<leftarrow> coin_spmf;
     S5 :: bool \<leftarrow> coin_spmf;
-    a :: 'v_OT121 \<leftarrow> S1_OT12 (S0, S1) (); 
-    b :: 'v_OT121 \<leftarrow> R1_OT12 (S2, S3) c1;
-    c :: 'v_OT121 \<leftarrow> R1_OT12 (S4, S5) c1;
-    return_spmf (msgs, (S0, S1, S2, S3, S4, S5), a, b, c)}"
+    a :: 'ot12_view1 \<leftarrow> S1_OT12 (M2 (S0, S1)) (U ()); 
+    b :: 'ot12_view1 \<leftarrow> R1_OT12 [M2 (S2, S3), C1 c1];
+    c :: 'ot12_view1 \<leftarrow> R1_OT12 [M2 (S4, S5), C1 c1];
+    return_spmf (M4 (m00, m01, m10, m11), (S0, S1, S2, S3, S4, S5), a, b, c)}"
 
-lemma lossless_R1_14_interm1: "lossless_spmf (R1_14_interm1 msgs C)"
-  by(simp add: R1_14_interm1_def split_def lossless_R1_12 lossless_S1_12)
+(*lemma lossless_R1_14_interm1: "lossless_spmf (R1_14_interm1 msgs C)"
+  by(simp add: R1_14_interm1_def split_def lossless_R1_12 lossless_S1_12)*)
 
-definition R1_14_interm2 :: "input1 \<Rightarrow> input2 \<Rightarrow> 'v_OT121 view1 spmf"
-  where "R1_14_interm2 msgs choice = do {
-    let (m00, m01, m10, m11) = msgs;
-    let (c0, c1) = choice;
+fun R1_14_interm2 :: "inputs_ot14 list \<Rightarrow> 'ot12_view1 view1 spmf"
+  where "R1_14_interm2 [M4 (m00, m01, m10, m11), C2 (c0,c1)] = do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
     S2 :: bool \<leftarrow> coin_spmf;
     S3 :: bool \<leftarrow> coin_spmf;
     S4 :: bool \<leftarrow> coin_spmf;
     S5 :: bool \<leftarrow> coin_spmf;
-    a :: 'v_OT121 \<leftarrow> S1_OT12 (S0, S1) (); 
-    b :: 'v_OT121 \<leftarrow> S1_OT12 (S2, S3) ();
-    c :: 'v_OT121 \<leftarrow> R1_OT12 (S4, S5) c1;
-    return_spmf (msgs, (S0, S1, S2, S3, S4, S5), a, b, c)}"
+    a :: 'ot12_view1 \<leftarrow> S1_OT12 (M2 (S0, S1)) (U ()); 
+    b :: 'ot12_view1 \<leftarrow> S1_OT12 (M2 (S2, S3)) (U ());
+    c :: 'ot12_view1 \<leftarrow> R1_OT12 [M2 (S4, S5), C1 c1];
+    return_spmf (M4 (m00, m01, m10, m11), (S0, S1, S2, S3, S4, S5), a, b, c)}"
 
-lemma lossless_R1_14_interm2: "lossless_spmf (R1_14_interm2 msgs C)"
-  by(simp add: R1_14_interm2_def split_def lossless_R1_12 lossless_S1_12)
+(*lemma lossless_R1_14_interm2: "lossless_spmf (R1_14_interm2 msgs C)"
+  by(simp add: R1_14_interm2_def split_def lossless_R1_12 lossless_S1_12)*)
 
-definition S1_14 :: "input1 \<Rightarrow> unit \<Rightarrow> 'v_OT121 view1 spmf"
-  where "S1_14 msgs _ = do {   
-    let (m00, m01, m10, m11) = msgs;    
+fun S1_14 :: "inputs_ot14 \<Rightarrow> outputs \<Rightarrow> 'ot12_view1 view1 spmf"
+  where "S1_14 (M4 (m00, m01, m10, m11)) (U ()) = do {   
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
     S2 :: bool \<leftarrow> coin_spmf;
     S3 :: bool \<leftarrow> coin_spmf;
     S4 :: bool \<leftarrow> coin_spmf;
     S5 :: bool \<leftarrow> coin_spmf;
-    a :: 'v_OT121 \<leftarrow> S1_OT12 (S0, S1) (); 
-    b :: 'v_OT121 \<leftarrow> S1_OT12 (S2, S3) ();
-    c :: 'v_OT121 \<leftarrow> S1_OT12 (S4, S5) ();
-    return_spmf (msgs, (S0, S1, S2, S3, S4, S5), a, b, c)}"
+    a :: 'ot12_view1 \<leftarrow> S1_OT12 (M2 (S0, S1)) (U ()); 
+    b :: 'ot12_view1 \<leftarrow> S1_OT12 (M2 (S2, S3)) (U ());
+    c :: 'ot12_view1 \<leftarrow> S1_OT12 (M2 (S4, S5)) (U ());
+    return_spmf (M4 (m00, m01, m10, m11), (S0, S1, S2, S3, S4, S5), a, b, c)}"
 
-lemma lossless_S1_14: "lossless_spmf (S1_14 m out)"
-  by(simp add: S1_14_def lossless_S1_12)
+(*lemma lossless_S1_14: "lossless_spmf (S1_14 m out)"
+  by(simp add: S1_14_def lossless_S1_12)*)
 
 lemma reduction_step1: 
-  shows "\<exists> A1. \<bar>spmf (bind_spmf (R1_14 M (c0, c1)) D) True - spmf (bind_spmf (R1_14_interm1 M (c0, c1)) D) True\<bar> =
-              \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c0) (\<lambda> view. (A1 view (m0,m1))))) True -
-                  spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1 view (m0,m1))))) True\<bar>"
+  shows "\<exists> A1. \<bar>spmf (bind_spmf (R1_14 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (R1_14_interm1 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True\<bar> =
+              \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c0]) (\<lambda> view. (A1 view (m0,m1))))) True -
+                  spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1 view (m0,m1))))) True\<bar>"
   including monad_normalisation
 proof-
-  define A1' where "A1' == \<lambda> (view :: 'v_OT121) (m0,m1). do {
+  define A1' where "A1' == \<lambda> (view :: 'ot12_view1) (m0,m1). do {
     S2 :: bool \<leftarrow> coin_spmf;
     S3 :: bool \<leftarrow> coin_spmf;
     S4 :: bool \<leftarrow> coin_spmf;
     S5 :: bool \<leftarrow> coin_spmf;
-    b :: 'v_OT121 \<leftarrow> R1_OT12 (S2, S3) c1;
-    c :: 'v_OT121 \<leftarrow> R1_OT12 (S4, S5) c1;
-    let R = (M, (m0,m1, S2, S3, S4, S5), view, b, c);
-    D R}"
-  have "\<bar>spmf (bind_spmf (R1_14 M (c0, c1)) D) True - spmf (bind_spmf (R1_14_interm1 M (c0, c1)) D) True\<bar> =
-       \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c0) (\<lambda> view. (A1' view (m0,m1))))) True -
-        spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1' view (m0,m1))))) True\<bar>"
-    apply(simp add: pair_spmf_alt_def R1_14_def R1_14_interm1_def A1'_def Let_def split_def) 
-    apply(subst bind_commute_spmf[of "S1_OT12 _ _"])
-    apply(subst bind_commute_spmf[of "S1_OT12 _ _"])
-    apply(subst bind_commute_spmf[of "S1_OT12 _ _"])
-    apply(subst bind_commute_spmf[of "S1_OT12 _ _"])
-    apply(subst bind_commute_spmf[of "S1_OT12 _ _"])
-    by auto
+    b :: 'ot12_view1 \<leftarrow> R1_OT12 [M2 (S2, S3), C1 c1];
+    c :: 'ot12_view1 \<leftarrow> R1_OT12 [M2 (S4, S5), C1 c1];
+    let R = (M4 (m00, m01, m10, m11), (m0,m1, S2, S3, S4, S5), view, b, c);
+    D1 R}"
+  have "\<bar>spmf (bind_spmf (R1_14 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (R1_14_interm1 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True\<bar> =
+       \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c0]) (\<lambda> view. (A1' view (m0,m1))))) True -
+        spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1' view (m0,m1))))) True\<bar>"
+    by(simp add: pair_spmf_alt_def A1'_def Let_def split_def) 
   then show ?thesis by auto
 qed
 
 lemma reduction_step1':
-  shows "\<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c0) (\<lambda> view. (A1 view (m0,m1))))) True -
-                  spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1 view (m0,m1))))) True\<bar> 
-                        \<le> adv_OT12"
-  (is "?lhs \<le> adv_OT12")
+  shows " \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c0]) (\<lambda> view. (A1 view (m0,m1))))) True -
+                  spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1 view (m0,m1))))) True\<bar> 
+                        \<le> ot12_adv_P1"
+  (is "?lhs \<le> ot12_adv_P1")
 proof-
-  have int1: "integrable (measure_spmf (pair_spmf coin_spmf coin_spmf)) (\<lambda>x. spmf (case x of (m0, m1) \<Rightarrow> R1_OT12 (m0, m1) c0 \<bind> (\<lambda>view. A1 view (m0, m1))) True)" 
-    and int2: "integrable (measure_spmf (pair_spmf coin_spmf coin_spmf)) (\<lambda>x. spmf (case x of (m0, m1) \<Rightarrow> S1_OT12 (m0, m1) () \<bind> (\<lambda>view. A1 view (m0, m1))) True)" 
+  have int1: "integrable (measure_spmf (pair_spmf coin_spmf coin_spmf)) (\<lambda>x. spmf (case x of (m0, m1) \<Rightarrow> R1_OT12 [M2 (m0, m1), C1 c0] \<bind> (\<lambda>view. A1 view (m0, m1))) True)" 
+    and int2: "integrable (measure_spmf (pair_spmf coin_spmf coin_spmf)) (\<lambda>x. spmf (case x of (m0, m1) \<Rightarrow> S1_OT12 (M2 (m0, m1)) (U ()) \<bind> (\<lambda>view. A1 view (m0, m1))) True)" 
     by(rule measure_spmf.integrable_const_bound[where B=1]; simp add: pmf_le_1)+
   have "?lhs = 
-            \<bar>LINT x|measure_spmf (pair_spmf coin_spmf coin_spmf). spmf (case x of (m0, m1) \<Rightarrow> R1_OT12 (m0, m1) c0 \<bind> (\<lambda>view. A1 view (m0, m1))) True 
-              - spmf (case x of (m0, m1) \<Rightarrow> S1_OT12 (m0, m1) () \<bind> (\<lambda>view. A1 view (m0, m1))) True\<bar>"
-    apply(subst (1 2) spmf_bind) using int1 int2 by simp
+            \<bar>LINT x|measure_spmf (pair_spmf coin_spmf coin_spmf). spmf (case x of (m0, m1) \<Rightarrow> R1_OT12 [M2 (m0, m1), C1 c0] \<bind> (\<lambda>view. A1 view (m0, m1))) True 
+              - spmf (case x of (m0, m1) \<Rightarrow> S1_OT12 (M2 (m0, m1)) (U ()) \<bind> (\<lambda>view. A1 view (m0, m1))) True\<bar>"
+    apply(subst (1 2) spmf_bind) using int1 int2 by auto
   also have "... \<le> LINT x|measure_spmf (pair_spmf coin_spmf coin_spmf). 
-               \<bar>spmf (R1_OT12 x c0 \<bind> (\<lambda>view. A1 view x)) True - spmf (S1_OT12 x () \<bind> (\<lambda>view. A1 view x)) True\<bar>"
+               \<bar>spmf (R1_OT12 [M2 x, C1 c0] \<bind> (\<lambda>view. A1 view x)) True - spmf (S1_OT12 (M2 x) (U ()) \<bind> (\<lambda>view. A1 view x)) True\<bar>"
     by(rule integral_abs_bound[THEN order_trans]; simp add: split_beta)
   ultimately have "?lhs \<le> LINT x|measure_spmf (pair_spmf coin_spmf coin_spmf). 
-                      \<bar>spmf (R1_OT12 x c0 \<bind> (\<lambda>view. A1 view x)) True - spmf (S1_OT12 x () \<bind> (\<lambda>view. A1 view x)) True\<bar>"
+                      \<bar>spmf (R1_OT12 [M2 x, C1 c0] \<bind> (\<lambda>view. A1 view x)) True - spmf (S1_OT12 (M2 x) (U ()) \<bind> (\<lambda>view. A1 view x)) True\<bar>"
     by simp
   also have "LINT x|measure_spmf (pair_spmf coin_spmf coin_spmf). 
-                \<bar>spmf (R1_OT12 x c0 \<bind> (\<lambda>view::'v_OT121. A1 view x)) True 
-                    - spmf (S1_OT12 x () \<bind> (\<lambda>view::'v_OT121. A1 view x)) True\<bar> \<le> adv_OT12"
+                \<bar>spmf (R1_OT12 [M2 x, C1 c0] \<bind> (\<lambda>view. A1 view x)) True 
+                    - spmf (S1_OT12 (M2 x) (U ()) \<bind> (\<lambda>view. A1 view x)) True\<bar> \<le> ot12_adv_P1"
     apply(rule integral_mono[THEN order_trans])
        apply(rule measure_spmf.integrable_const_bound[where B=2])
         apply clarsimp
         apply(rule abs_triangle_ineq4[THEN order_trans])
     subgoal for m0 m1
-      using pmf_le_1[of "R1_OT12 (m0, m1) c0 \<bind> (\<lambda>view. A1 view (m0, m1))" "Some True"]
-        pmf_le_1[of "S1_OT12 (m0, m1) () \<bind> (\<lambda>view. A1 view (m0, m1))" "Some True"]
+      using pmf_le_1[of "R1_OT12 [M2 (m0, m1), C1 c0] \<bind> (\<lambda>view. A1 view (m0, m1))" "Some True"]
+        pmf_le_1[of "S1_OT12 (M2 (m0, m1)) (U ()) \<bind> (\<lambda>view. A1 view (m0, m1))" "Some True"]
       by simp
        apply simp
       apply(rule measure_spmf.integrable_const)
@@ -218,31 +211,31 @@ proof-
 qed
 
 lemma reduction_step2: 
-  shows "\<exists> A1. \<bar>spmf (bind_spmf (R1_14_interm1 M (c0, c1)) D) True - spmf (bind_spmf (R1_14_interm2 M (c0, c1)) D) True\<bar> =
-          \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A1 view (m0,m1))))) True -
-            spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1 view (m0,m1))))) True\<bar>"
+  shows "\<exists> A1. \<bar>spmf (bind_spmf (R1_14_interm1 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (R1_14_interm2 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True\<bar> =
+          \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A1 view (m0,m1))))) True -
+            spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1 view (m0,m1))))) True\<bar>"
 proof-
-  define A1' where "A1' == \<lambda> (view :: 'v_OT121) (m0,m1). do {
+  define A1' where "A1' == \<lambda> (view :: 'ot12_view1) (m0,m1). do {
     S2 :: bool \<leftarrow> coin_spmf;
     S3 :: bool \<leftarrow> coin_spmf;
     S4 :: bool \<leftarrow> coin_spmf;
     S5 :: bool \<leftarrow> coin_spmf;
-    a :: 'v_OT121 \<leftarrow> S1_OT12 (S2,S3) ();
-    c :: 'v_OT121 \<leftarrow> R1_OT12 (S4, S5) c1;
-    let R = (M, (S2,S3, m0, m1, S4, S5), a, view, c);
-    D R}"
-  have "\<bar>spmf (bind_spmf (R1_14_interm1 M (c0, c1)) D) True - spmf (bind_spmf (R1_14_interm2 M (c0, c1)) D) True\<bar> =
-       \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A1' view (m0,m1))))) True -
-        spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1' view (m0,m1))))) True\<bar>"
+    a :: 'ot12_view1 \<leftarrow> S1_OT12 (M2 (S2,S3)) (U ());
+    c :: 'ot12_view1 \<leftarrow> R1_OT12 [M2 (S4, S5), C1 c1];
+    let R = (M4 (m00, m01, m10, m11), (S2,S3, m0, m1, S4, S5), a, view, c);
+    D1 R}"
+  have "\<bar>spmf (bind_spmf (R1_14_interm1 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (R1_14_interm2 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True\<bar> =
+       \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A1' view (m0,m1))))) True -
+        spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1' view (m0,m1))))) True\<bar>"
   proof-
-    have "(bind_spmf (R1_14_interm1 M (c0, c1)) D) = (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A1' view (m0,m1)))))"
-      unfolding R1_14_interm1_def R1_14_interm2_def A1'_def Let_def split_def
+    have "(bind_spmf (R1_14_interm1 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) = (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A1' view (m0,m1)))))"
+      unfolding  A1'_def Let_def split_def
       apply(simp add: pair_spmf_alt_def) 
       apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
       apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>"  in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
       including monad_normalisation by(simp)
-    also have "(bind_spmf (R1_14_interm2 M (c0, c1)) D) =  (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1' view (m0,m1)))))"
-      unfolding R1_14_interm1_def R1_14_interm2_def A1'_def Let_def split_def
+    also have "(bind_spmf (R1_14_interm2 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) =  (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1' view (m0,m1)))))"
+      unfolding A1'_def Let_def split_def
       apply(simp add: pair_spmf_alt_def) 
       apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
       apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>"  in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
@@ -260,33 +253,35 @@ proof-
 qed
 
 lemma reduction_step3: 
-  shows "\<exists> A1. \<bar>spmf (bind_spmf (R1_14_interm2 M (c0, c1)) D) True - spmf (bind_spmf (S1_14 M out) D) True\<bar> =
-          \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A1 view (m0,m1))))) True -
-            spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1 view (m0,m1))))) True\<bar>"
+  shows "\<exists> A1. \<bar>spmf (bind_spmf (R1_14_interm2 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (S1_14 (M4 (m00, m01, m10, m11)) (U ())) D1) True\<bar> =
+          \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A1 view (m0,m1))))) True -
+            spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1 view (m0,m1))))) True\<bar>"
 proof-
-  define A1' where "A1' == \<lambda> (view :: 'v_OT121) (m0,m1). do {
+  define A1' where "A1' == \<lambda> (view :: 'ot12_view1) (m0,m1). do {
     S2 :: bool \<leftarrow> coin_spmf;
     S3 :: bool \<leftarrow> coin_spmf;
     S4 :: bool \<leftarrow> coin_spmf;
     S5 :: bool \<leftarrow> coin_spmf;
-    a :: 'v_OT121 \<leftarrow> S1_OT12 (S2,S3) ();
-    b :: 'v_OT121 \<leftarrow> S1_OT12 (S4, S5) ();
-    let R = (M, (S2,S3, S4, S5,m0, m1), a, b, view);
-    D R}"
-  have "\<bar>spmf (bind_spmf (R1_14_interm2 M (c0, c1)) D) True - spmf (bind_spmf (S1_14 M out) D) True\<bar> =
-       \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A1' view (m0,m1))))) True -
-        spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1' view (m0,m1))))) True\<bar>"
+    a :: 'ot12_view1 \<leftarrow> S1_OT12 (M2 (S2,S3)) (U ());
+    b :: 'ot12_view1 \<leftarrow> S1_OT12 (M2 (S4, S5)) (U ());
+    let R = (M4 (m00, m01, m10, m11), (S2,S3, S4, S5,m0, m1), a, b, view);
+    D1 R}"
+  have "\<bar>spmf (bind_spmf (R1_14_interm2 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (S1_14 (M4 (m00, m01, m10, m11)) (U ())) D1) True\<bar> =
+       \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A1' view (m0,m1))))) True -
+        spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1' view (m0,m1))))) True\<bar>"
   proof-
-    have "(bind_spmf (R1_14_interm2 M (c0, c1)) D) = (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A1' view (m0,m1)))))"
-      unfolding  R1_14_interm2_def A1'_def Let_def split_def
+    have "(bind_spmf (R1_14_interm2 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) 
+            = (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A1' view (m0,m1)))))"
+      unfolding A1'_def Let_def split_def
       apply(simp add: pair_spmf_alt_def) 
       apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
       apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>"  in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
       apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>"  in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
       apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>"  in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
       including monad_normalisation by(simp)
-    also have "(bind_spmf (S1_14 M out) D) = (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1' view (m0,m1)))))"
-      unfolding S1_14_def Let_def A1'_def split_def
+    also have "(bind_spmf (S1_14 (M4 (m00, m01, m10, m11)) (U ())) D1) 
+                = (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1' view (m0,m1)))))"
+      unfolding Let_def A1'_def split_def
       apply(simp add: pair_spmf_alt_def) 
       apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
       apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>"  in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
@@ -308,49 +303,49 @@ proof-
 qed
 
 lemma reduction_P1_interm: 
-  shows "\<bar>spmf (bind_spmf (R1_14 M (c0,c1)) (D)) True - spmf (bind_spmf (S1_14 M out) (D)) True\<bar> \<le> 3 * adv_OT12"
+  shows "\<bar>spmf (bind_spmf (R1_14 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (S1_14 (M4 (m00, m01, m10, m11)) (U ())) D1) True\<bar> \<le> 3 * ot12_adv_P1"
     (is "?lhs \<le> ?rhs")
 proof-
-  have lhs: "?lhs \<le> \<bar>spmf (bind_spmf (R1_14 M (c0, c1)) D) True - spmf (bind_spmf (R1_14_interm1 M (c0, c1)) D) True\<bar> + 
-                     \<bar>spmf (bind_spmf (R1_14_interm1 M (c0, c1)) D) True - spmf (bind_spmf (R1_14_interm2 M (c0, c1)) D) True\<bar> +
-                      \<bar>spmf (bind_spmf (R1_14_interm2 M (c0, c1)) D) True - spmf (bind_spmf (S1_14 M out) D) True\<bar>"
+  have lhs: "?lhs \<le> \<bar>spmf (bind_spmf (R1_14 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (R1_14_interm1 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True\<bar> + 
+                     \<bar>spmf (bind_spmf (R1_14_interm1 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (R1_14_interm2 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True\<bar> +
+                      \<bar>spmf (bind_spmf (R1_14_interm2 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (S1_14 (M4 (m00, m01, m10, m11)) (U ())) D1) True\<bar>"
     by simp
-  obtain A1 where A1: "\<bar>spmf (bind_spmf (R1_14 M (c0, c1)) D) True - spmf (bind_spmf (R1_14_interm1 M (c0, c1)) D) True\<bar> =
-                        \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c0) (\<lambda> view. (A1 view (m0,m1))))) True -
-                          spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1 view (m0,m1))))) True\<bar>"
+  obtain A1 where A1: "\<bar>spmf (bind_spmf (R1_14 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (R1_14_interm1 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True\<bar> =
+                        \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c0]) (\<lambda> view. (A1 view (m0,m1))))) True -
+                          spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1 view (m0,m1))))) True\<bar>"
     using reduction_step1 by blast
-  obtain A2 where A2: "\<bar>spmf (bind_spmf (R1_14_interm1 M (c0, c1)) D) True - spmf (bind_spmf (R1_14_interm2 M (c0, c1)) D) True\<bar> = 
-                        \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A2 view (m0,m1))))) True -
-                          spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A2 view (m0,m1))))) True\<bar>"
+  obtain A2 where A2: "\<bar>spmf (bind_spmf (R1_14_interm1 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (R1_14_interm2 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True\<bar> = 
+                        \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A2 view (m0,m1))))) True -
+                          spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A2 view (m0,m1))))) True\<bar>"
     using reduction_step2 by blast
-  obtain A3 where A3: "\<bar>spmf (bind_spmf (R1_14_interm2 M (c0, c1)) D) True - spmf (bind_spmf (S1_14 M out) D) True\<bar> =
-                        \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A3 view (m0,m1))))) True -
-                          spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A3 view (m0,m1))))) True\<bar>"
+  obtain A3 where A3: "\<bar>spmf (bind_spmf (R1_14_interm2 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D1) True - spmf (bind_spmf (S1_14 (M4 (m00, m01, m10, m11)) (U ())) D1) True\<bar> =
+                        \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A3 view (m0,m1))))) True -
+                          spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A3 view (m0,m1))))) True\<bar>"
     using reduction_step3 by blast
-  have lhs_bound: "?lhs \<le> \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c0) (\<lambda> view. (A1 view (m0,m1))))) True -
-                  spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1 view (m0,m1))))) True\<bar> + 
-                   \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A2 view (m0,m1))))) True -
-                    spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A2 view (m0,m1))))) True\<bar> +
-                     \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A3 view (m0,m1))))) True -
-                      spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A3 view (m0,m1))))) True\<bar>"
-    using A1 A2 A3 lhs by simp
-  have bound1: "\<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c0) (\<lambda> view. (A1 view (m0,m1))))) True -
-                  spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A1 view (m0,m1))))) True\<bar> 
-                      \<le> adv_OT12" 
-    and bound2: "\<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A2 view (m0,m1))))) True -
-                  spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A2 view (m0,m1))))) True\<bar> 
-                      \<le> adv_OT12" 
-    and bound3: "\<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 (m0,m1) c1) (\<lambda> view. (A3 view (m0,m1))))) True -
-        spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (m0,m1) ()) (\<lambda> view. (A3 view (m0,m1))))) True\<bar> \<le> adv_OT12"
+  have lhs_bound: "?lhs \<le> \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c0]) (\<lambda> view. (A1 view (m0,m1))))) True -
+                  spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1 view (m0,m1))))) True\<bar> + 
+                   \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A2 view (m0,m1))))) True -
+                    spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A2 view (m0,m1))))) True\<bar> +
+                     \<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A3 view (m0,m1))))) True -
+                      spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A3 view (m0,m1))))) True\<bar>"
+    using A1 A2 A3 lhs by argo
+  have bound1: "\<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c0]) (\<lambda> view. (A1 view (m0,m1))))) True -
+                  spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A1 view (m0,m1))))) True\<bar> 
+                      \<le> ot12_adv_P1" 
+    and bound2: "\<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A2 view (m0,m1))))) True -
+                  spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A2 view (m0,m1))))) True\<bar> 
+                      \<le> ot12_adv_P1" 
+    and bound3: "\<bar>spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (R1_OT12 [M2 (m0,m1), C1 c1]) (\<lambda> view. (A3 view (m0,m1))))) True -
+        spmf (bind_spmf (pair_spmf coin_spmf coin_spmf) (\<lambda>(m0, m1). bind_spmf (S1_OT12 (M2 (m0,m1)) (U ())) (\<lambda> view. (A3 view (m0,m1))))) True\<bar> \<le> ot12_adv_P1"
     using reduction_step1' by auto
   thus ?thesis
     using reduction_step1' lhs_bound by argo  
 qed
 
-lemma reduction_P1: "\<bar>spmf (bind_spmf (R1_14 M (c0,c1)) (D)) True 
-                        - spmf (funct_OT_14 M (c0,c1) \<bind> (\<lambda> (out1,out2). S1_14 M out1 \<bind> (\<lambda> view. D view))) True\<bar> 
-                              \<le> 3 * adv_OT12"
-  by(simp add: funct_OT_14_def split_def Let_def reduction_P1_interm )
+lemma reduction_P1: "\<bar>spmf (bind_spmf (R1_14 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) D) True 
+                        - spmf (f_ot14 [M4 (m00, m01, m10, m11), C2 (c0,c1)] \<bind> (\<lambda> outputs. S1_14 (M4 (m00, m01, m10, m11)) (nth outputs 0) \<bind> (\<lambda> view. D view))) True\<bar> 
+                              \<le> 3 * ot12_adv_P1"
+  using reduction_P1_interm by simp
 
 text\<open>Party 2 security.\<close>
 
@@ -373,10 +368,8 @@ proof-
   thus ?thesis using coin_coin by simp
 qed
 
-definition R2_14:: "input1 \<Rightarrow> input2 \<Rightarrow> 'v_OT122 view2 spmf"
-  where "R2_14 M C = do {
-    let (m0,m1,m2,m3) = M;
-    let (c0,c1) = C;
+fun R2_14:: "inputs_ot14 list \<Rightarrow> 'ot12_view2 view2 spmf"
+  where "R2_14 [M4 (m0,m1,m2,m3), C2 (c0,c1)] = do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
     S2 :: bool \<leftarrow> coin_spmf;
@@ -387,17 +380,13 @@ definition R2_14:: "input1 \<Rightarrow> input2 \<Rightarrow> 'v_OT122 view2 spm
     let a1 = S0 \<oplus> S3 \<oplus> m1;
     let a2 = S1 \<oplus> S4 \<oplus> m2;
     let a3 = S1 \<oplus> S5 \<oplus> m3; 
-    a :: 'v_OT122 \<leftarrow> R2_OT12 (S0,S1) c0;
-    b :: 'v_OT122 \<leftarrow> R2_OT12 (S2,S3) c1;
-    c :: 'v_OT122 \<leftarrow> R2_OT12 (S4,S5) c1;
-    return_spmf (C, (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> R2_OT12 [M2 (S0,S1), C1 c0];
+    b :: 'ot12_view2 \<leftarrow> R2_OT12 [M2 (S2,S3), C1 c1];
+    c :: 'ot12_view2 \<leftarrow> R2_OT12 [M2 (S4,S5), C1 c1];
+    return_spmf (C2 (c0,c1), (a0,a1,a2,a3), a,b,c)}"
 
-lemma lossless_R2_14: "lossless_spmf (R2_14 M C)"
-  by(simp add: R2_14_def split_def lossless_R2_12)
-
-definition S2_14 :: "input2 \<Rightarrow> bool \<Rightarrow> 'v_OT122 view2 spmf"
-  where "S2_14 C out = do {
-    let ((c0::bool),(c1::bool)) = C;
+fun S2_14 :: "inputs_ot14 \<Rightarrow> outputs \<Rightarrow> 'ot12_view2 view2 spmf"
+  where "S2_14 (C2 (c0,c1)) (P out) = do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
     S2 :: bool \<leftarrow> coin_spmf;
@@ -412,18 +401,17 @@ definition S2_14 :: "input2 \<Rightarrow> bool \<Rightarrow> 'v_OT122 view2 spmf
     let a1' = (if ((\<not> c0) \<and> c1) then (S0 \<oplus> S3 \<oplus> out) else a1);
     let a2' = (if (c0 \<and> (\<not> c1)) then (S1 \<oplus> S4 \<oplus> out) else a2);
     let a3' = (if (c0 \<and> c1) then (S1 \<oplus> S5 \<oplus> out) else a3);
-    a :: 'v_OT122 \<leftarrow> S2_OT12 (c0::bool) (if c0 then S1 else S0);
-    b :: 'v_OT122 \<leftarrow> S2_OT12 (c1::bool) (if c1 then S3 else S2);
-    c :: 'v_OT122 \<leftarrow> S2_OT12 (c1::bool) (if c1 then S5 else S4);
-    return_spmf ((c0,c1), (a0',a1',a2',a3'), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 c0) (if c0 then (P S1) else (P S0));
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 c1) (if c1 then (P S3) else (P S2));
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 c1) (if c1 then (P S5) else (P S4));
+    return_spmf (C2 (c0,c1), (a0',a1',a2',a3'), a,b,c)}"
 
-lemma lossless_S2_14: "lossless_spmf (S2_14 c out)" 
-  by(simp add: S2_14_def lossless_S2_12 split_def)
-
-lemma P2_OT_14_FT: "R2_14 (m0,m1,m2,m3) (False,True) = funct_OT_14 (m0,m1,m2,m3) (False,True) \<bind> (\<lambda> (out1, out2). S2_14 (False,True) out2)"
+lemma P2_OT_14_FT:
+  shows "R2_14 [M4 (m0,m1,m2,m3), C2 (False, True)]  
+              = f_ot14 [M4 (m0,m1,m2,m3), C2 (False, True)] \<bind> (\<lambda> outputs. S2_14 (C2 (False,True)) (nth outputs 1))"
   including monad_normalisation
 proof-
-  have "R2_14 (m0,m1,m2,m3) (False,True) =  do {
+  have "R2_14 [M4 (m0,m1,m2,m3), C2 (False, True)] =  do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
     S3 :: bool \<leftarrow> coin_spmf;
@@ -432,11 +420,11 @@ proof-
     let a1 = S0 \<oplus> S3 \<oplus> m1;
     a2 \<leftarrow> map_spmf (\<lambda> S4. S1 \<oplus> S4 \<oplus> m2) coin_spmf;
     let a3 = S1 \<oplus> S5 \<oplus> m3; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 False S0; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 True S3;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 True S5;
-    return_spmf ((False,True), (a0,a1,a2,a3), a,b,c)}"
-    by(simp add: bind_map_spmf o_def Let_def R2_14_def inf_th_OT12_P2 funct_OT_12_def OT_12_P2_assm)
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S0); 
+    b :: 'ot12_view2\<leftarrow> S2_OT12 (C1 True) (P S3);
+    c :: 'ot12_view2\<leftarrow> S2_OT12 (C1 True) (P S5);
+    return_spmf (C2 (False,True), (a0,a1,a2,a3), a,b,c)}"
+    by(simp add: bind_map_spmf o_def Let_def OT_12_P2_assm)
   also have "... =  do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
@@ -446,10 +434,10 @@ proof-
     let a1 = S0 \<oplus> S3 \<oplus> m1;
     a2 \<leftarrow> coin_spmf;
     let a3 = S1 \<oplus> S5 \<oplus> m3; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 False S0; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 True S3;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 True S5;
-    return_spmf ((False,True), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S0); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S3);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S5);
+    return_spmf (C2 (False,True), (a0,a1,a2,a3), a,b,c)}"
     using coin_coin' by simp
   also have "... =  do {
     S0 :: bool \<leftarrow> coin_spmf;
@@ -459,10 +447,10 @@ proof-
     let a1 = S0 \<oplus> S3 \<oplus> m1;
     a2 :: bool \<leftarrow> coin_spmf;
     a3 \<leftarrow> map_spmf (\<lambda> S1. S1 \<oplus> S5 \<oplus> m3) coin_spmf; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 False S0; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 True S3;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 True S5;
-    return_spmf ((False,True), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S0); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S3);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S5);
+    return_spmf (C2 (False,True), (a0,a1,a2,a3), a,b,c)}"
     by(simp add: bind_map_spmf o_def Let_def)
   also have "... =  do {
     S0 :: bool \<leftarrow> coin_spmf;
@@ -472,19 +460,19 @@ proof-
     let a1 = S0 \<oplus> S3 \<oplus> m1;
     a2 :: bool \<leftarrow> coin_spmf;
     a3 \<leftarrow> coin_spmf; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 False S0; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 True S3;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 True S5;
-    return_spmf ((False,True), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S0); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S3);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S5);
+    return_spmf (C2 (False,True), (a0,a1,a2,a3), a,b,c)}"
     using coin_coin by simp
   ultimately show ?thesis 
-    by(simp add: funct_OT_14_def S2_14_def bind_spmf_const)
+    by(simp add: bind_spmf_const)
 qed
 
-lemma P2_OT_14_TT: "R2_14 (m0,m1,m2,m3) (True,True) = funct_OT_14 (m0,m1,m2,m3) (True,True) \<bind> (\<lambda> (out1, out2). S2_14 (True,True) out2)"
+lemma P2_OT_14_TT: "R2_14 [M4 (m0,m1,m2,m3), C2 (True,True)] = f_ot14 [M4 (m0,m1,m2,m3), C2 (True,True)] \<bind> (\<lambda> outputs. S2_14 (C2 (True,True)) (nth outputs 1))"
   including monad_normalisation
 proof-
-  have "R2_14 (m0,m1,m2,m3) (True,True) =  do {
+  have "R2_14 [M4 (m0,m1,m2,m3), C2 (True,True)] =  do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
     S3 :: bool \<leftarrow> coin_spmf;
@@ -493,11 +481,11 @@ proof-
     let a1 = S0 \<oplus> S3 \<oplus> m1;
     a2 \<leftarrow> map_spmf (\<lambda> S4. S1 \<oplus> S4 \<oplus> m2) coin_spmf;
     let a3 = S1 \<oplus> S5 \<oplus> m3;
-    a :: 'v_OT122 \<leftarrow> S2_OT12 True S1; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 True S3;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 True S5;
-    return_spmf ((True,True), (a0,a1,a2,a3), a,b,c)}"
-    by(simp add: bind_map_spmf o_def R2_14_def inf_th_OT12_P2 funct_OT_12_def OT_12_P2_assm Let_def)
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S1); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S3);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S5);
+    return_spmf (C2 (True,True), (a0,a1,a2,a3), a,b,c)}"
+    by(simp add: bind_map_spmf o_def OT_12_P2_assm Let_def)
   also have "... = do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
@@ -507,10 +495,10 @@ proof-
     let a1 = S0 \<oplus> S3 \<oplus> m1;
     a2 \<leftarrow> coin_spmf;
     let a3 = S1 \<oplus> S5 \<oplus> m3;
-    a :: 'v_OT122 \<leftarrow> S2_OT12 True S1; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 True S3;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 True S5;
-    return_spmf ((True,True), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S1); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S3);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S5);
+    return_spmf (C2 (True,True), (a0,a1,a2,a3), a,b,c)}"
     using coin_coin' by simp
   also have "... = do {
     S1 :: bool \<leftarrow> coin_spmf;
@@ -520,10 +508,10 @@ proof-
     a1 :: bool \<leftarrow> map_spmf (\<lambda> S0. S0 \<oplus> S3 \<oplus> m1) coin_spmf;
     a2 \<leftarrow> coin_spmf;
     let a3 = S1 \<oplus> S5 \<oplus> m3;
-    a :: 'v_OT122 \<leftarrow> S2_OT12 True S1; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 True S3;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 True S5;
-    return_spmf ((True,True), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S1); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S3);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S5);
+    return_spmf (C2 (True,True), (a0,a1,a2,a3), a,b,c)}"
     by(simp add: bind_map_spmf o_def Let_def)    
   also have "... = do {
     S1 :: bool \<leftarrow> coin_spmf;
@@ -533,19 +521,19 @@ proof-
     a1 :: bool \<leftarrow> coin_spmf;
     a2 \<leftarrow> coin_spmf;
     let a3 = S1 \<oplus> S5 \<oplus> m3;
-    a :: 'v_OT122 \<leftarrow> S2_OT12 True S1; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 True S3;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 True S5;
-    return_spmf ((True,True), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S1); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S3);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S5);
+    return_spmf (C2 (True,True), (a0,a1,a2,a3), a,b,c)}"
     using coin_coin by simp
   ultimately show ?thesis
-    by(simp add: funct_OT_14_def S2_14_def bind_spmf_const)
+    by(simp add: bind_spmf_const)
 qed
 
-lemma P2_OT_14_FF: "R2_14 (m0,m1,m2,m3) (False, False) = funct_OT_14 (m0,m1,m2,m3) (False, False) \<bind> (\<lambda> (out1, out2). S2_14 (False, False) out2)"
+lemma P2_OT_14_FF: "R2_14 [M4 (m0,m1,m2,m3), C2 (False, False)] = f_ot14 [M4 (m0,m1,m2,m3), C2 (False, False)] \<bind> (\<lambda> outputs. S2_14 (C2 (False, False)) (nth outputs 1))"
   including monad_normalisation
 proof-
-  have "R2_14 (m0,m1,m2,m3) (False,False) =  do {
+  have "R2_14 [M4 (m0,m1,m2,m3), C2 (False, False)] = do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
     S2 :: bool \<leftarrow> coin_spmf;
@@ -554,11 +542,11 @@ proof-
     a1 :: bool \<leftarrow> map_spmf (\<lambda> S3. S0 \<oplus> S3 \<oplus> m1) coin_spmf;
     let a2 = S1 \<oplus> S4 \<oplus> m2;
     a3 \<leftarrow> map_spmf (\<lambda> S5. S1 \<oplus> S5 \<oplus> m3) coin_spmf; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 False S0; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 False S2;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 False S4;
-    return_spmf ((False,False), (a0,a1,a2,a3), a,b,c)}"
-    by(simp add: bind_map_spmf o_def R2_14_def inf_th_OT12_P2 funct_OT_12_def OT_12_P2_assm Let_def)
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S0); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S2);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S4);
+    return_spmf (C2 (False,False), (a0,a1,a2,a3), a,b,c)}"
+    by(simp add: bind_map_spmf o_def OT_12_P2_assm Let_def)
   also have "... = do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
@@ -568,10 +556,10 @@ proof-
     a1 :: bool \<leftarrow> coin_spmf;
     let a2 = S1 \<oplus> S4 \<oplus> m2;
     a3 \<leftarrow> coin_spmf; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 False S0; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 False S2;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 False S4;
-    return_spmf ((False,False), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S0); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S2);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S4);
+    return_spmf (C2 (False,False), (a0,a1,a2,a3), a,b,c)}"
     using coin_coin' by simp
   also have "... = do {
     S0 :: bool \<leftarrow> coin_spmf;
@@ -581,10 +569,10 @@ proof-
     a1 :: bool \<leftarrow> coin_spmf;
     a2 :: bool \<leftarrow> map_spmf (\<lambda> S1. S1 \<oplus> S4 \<oplus> m2) coin_spmf;
     a3 \<leftarrow> coin_spmf; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 False S0; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 False S2;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 False S4;
-    return_spmf ((False,False), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S0); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S2);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S4);
+    return_spmf (C2 (False,False), (a0,a1,a2,a3), a,b,c)}"
     by(simp add: bind_map_spmf o_def Let_def)
   also have "... = do {
     S0 :: bool \<leftarrow> coin_spmf;
@@ -594,19 +582,19 @@ proof-
     a1 :: bool \<leftarrow> coin_spmf;
     a2 :: bool \<leftarrow> coin_spmf;
     a3 \<leftarrow> coin_spmf; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 False S0; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 False S2;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 False S4;
-    return_spmf ((False,False), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S0); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S2);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S4);
+    return_spmf (C2 (False,False), (a0,a1,a2,a3), a,b,c)}"
     using coin_coin by simp
   ultimately show ?thesis 
-    by(simp add: funct_OT_14_def S2_14_def bind_spmf_const)
+    by(simp add: bind_spmf_const)
 qed
 
-lemma P2_OT_14_TF: "R2_14 (m0,m1,m2,m3) (True,False) = funct_OT_14 (m0,m1,m2,m3) (True,False) \<bind> (\<lambda> (out1, out2). S2_14 (True,False) out2)"
+lemma P2_OT_14_TF: "R2_14 [M4 (m0,m1,m2,m3), C2 (True,False)] = f_ot14 [M4 (m0,m1,m2,m3), C2 (True,False)] \<bind> (\<lambda> outputs. S2_14 (C2 (True,False)) (nth outputs 1))"
   including monad_normalisation
 proof-
-  have "R2_14 (m0,m1,m2,m3) (True,False) = do {
+  have "R2_14 [M4 (m0,m1,m2,m3), C2 (True,False)] = do {
     S0 :: bool \<leftarrow> coin_spmf;
     S1 :: bool \<leftarrow> coin_spmf;
     S2 :: bool \<leftarrow> coin_spmf;
@@ -615,11 +603,11 @@ proof-
     a1 :: bool \<leftarrow> map_spmf (\<lambda> S3. S0 \<oplus> S3 \<oplus> m1) coin_spmf;
     let a2 = S1 \<oplus> S4 \<oplus> m2;
     a3 \<leftarrow> map_spmf (\<lambda> S5. S1 \<oplus> S5 \<oplus> m3) coin_spmf; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 True S1; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 False S2;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 False S4;
-    return_spmf ((True,False), (a0,a1,a2,a3), a,b,c)}"
-    apply(simp add: R2_14_def inf_th_OT12_P2 OT_12_P2_assm funct_OT_12_def Let_def)
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S1); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S2);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S4);
+    return_spmf (C2 (True,False), (a0,a1,a2,a3), a,b,c)}"
+    apply(simp add: OT_12_P2_assm Let_def)
     apply(rewrite in "bind_spmf _ \<hole>" in "\<hole> = _" bind_commute_spmf)
     apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>" in "\<hole> = _" bind_commute_spmf)
     apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>"  in "bind_spmf _ \<hole>" in "\<hole> = _" bind_commute_spmf)
@@ -633,10 +621,10 @@ proof-
     a1 :: bool \<leftarrow> coin_spmf;
     let a2 = S1 \<oplus> S4 \<oplus> m2;
     a3 \<leftarrow> coin_spmf; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 True S1; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 False S2;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 False S4;
-    return_spmf ((True,False), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S1); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S2);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S4);
+    return_spmf (C2 (True,False), (a0,a1,a2,a3), a,b,c)}"
     using coin_coin' by simp
   also have "... = do {
     S1 :: bool \<leftarrow> coin_spmf;
@@ -646,10 +634,10 @@ proof-
     a1 :: bool \<leftarrow> coin_spmf;
     let a2 = S1 \<oplus> S4 \<oplus> m2;
     a3 \<leftarrow> coin_spmf; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 True S1; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 False S2;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 False S4;
-    return_spmf ((True,False), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S1); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S2);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S4);
+    return_spmf (C2 (True,False), (a0,a1,a2,a3), a,b,c)}"
     by(simp add: bind_map_spmf o_def Let_def)
   also have "... = do {
     S1 :: bool \<leftarrow> coin_spmf;
@@ -659,85 +647,87 @@ proof-
     a1 :: bool \<leftarrow> coin_spmf;
     let a2 = S1 \<oplus> S4 \<oplus> m2;
     a3 \<leftarrow> coin_spmf; 
-    a :: 'v_OT122 \<leftarrow> S2_OT12 True S1; 
-    b :: 'v_OT122 \<leftarrow> S2_OT12 False S2;
-    c :: 'v_OT122 \<leftarrow> S2_OT12 False S4;
-    return_spmf ((True,False), (a0,a1,a2,a3), a,b,c)}"
+    a :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 True) (P S1); 
+    b :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S2);
+    c :: 'ot12_view2 \<leftarrow> S2_OT12 (C1 False) (P S4);
+    return_spmf (C2 (True,False), (a0,a1,a2,a3), a,b,c)}"
     using coin_coin by simp
   ultimately show ?thesis
-    apply(simp add: funct_OT_14_def S2_14_def bind_spmf_const)
-    apply(rewrite in "bind_spmf _ \<hole>"  in "_ = \<hole>" bind_commute_spmf)
-    apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
-    apply(rewrite in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>" in "bind_spmf _ \<hole>" in "_ = \<hole>" bind_commute_spmf)
-    by simp
+    by(simp add: bind_spmf_const)
 qed
 
-lemma P2_sec_OT_14_split: "R2_14 (m0,m1,m2,m3) (c0,c1) = funct_OT_14 (m0,m1,m2,m3) (c0,c1) \<bind> (\<lambda> (out1, out2). S2_14 (c0,c1) out2)"
-  by(cases c0; cases c1; auto simp add: P2_OT_14_FF P2_OT_14_TF P2_OT_14_FT P2_OT_14_TT)
+lemma perfect_security_P2: 
+  shows "R2_14 [M4 (m0,m1,m2,m3), C2 (c0,c1)] = f_ot14 [M4 (m0,m1,m2,m3), C2 (c0,c1)] \<bind> (\<lambda> outputs. S2_14 (C2 (c0,c1)) (nth outputs 1))"
+  apply(cases c0; cases c1)
+  using P2_OT_14_FF P2_OT_14_TF P2_OT_14_FT P2_OT_14_TT by auto
 
-lemma P2_sec_OT_14: "R2_14 M C = funct_OT_14 M C \<bind> (\<lambda> (out1, out2). S2_14 C out2)"
-  by(metis P2_sec_OT_14_split surj_pair) 
+sublocale ot14_P1: semi_honest_det_security 0 f_ot14 R1_14 S1_14 valid_inputs_ot14 .
 
-sublocale OT_14: sim_det_def R1_14 S1_14 R2_14 S2_14 funct_OT_14 protocol_14_OT
-  unfolding sim_det_def_def 
-  by(simp add: lossless_R1_14 lossless_S1_14 lossless_funct_14_OT lossless_R2_14 lossless_S2_14 )
+lemma ot14_secuirty_P1: "ot14_P1.advantage [M4 (m0,m1,m2,m3), C2 (c0,c1)] D \<le> 3 * ot12_adv_P1"
+  unfolding ot14_P1.advantage_def   
+  using reduction_P1 by simp
 
-lemma correctness_OT_14: 
-  shows "funct_OT_14 M C = protocol_14_OT M C"
+sublocale ot14_P2: semi_honest_det_security 1 f_ot14 R2_14 S2_14 valid_inputs_ot14 .
+
+lemma ot14_security_P2: "ot14_P2.perfect_security [M4 (m0,m1,m2,m3), C2 (c0,c1)]"
+  unfolding ot14_P2.perfect_security_def
+  using perfect_security_P2 by simp
+
+sublocale ot14_correct: semi_honest_det_correctness f_ot14 protocol_ot14 valid_inputs_ot14 .
+
+lemma ot12_correct_unfold: "protocol_ot12 [M2 (S0, S1), C1 a] = f_ot12 [M2 (S0, S1), C1 a]" for a
+  using ot12_correct[unfolded ot12.correctness_def] valid_inputs_ot12.simps by presburger
+
+lemma ot14_correct_unfold: 
+  shows "f_ot14 [M4 (m0,m1,m2,m3), C2 (c0,c1)] = protocol_ot14 [M4 (m0,m1,m2,m3), C2 (c0,c1)]"
 proof-
-  have "S1 = (S5 = (S1 = (S5 = d))) = d" for S1 S5 d by auto
-  thus ?thesis
-    by(cases "fst C"; cases "snd C"; simp add: funct_OT_14_def protocol_14_OT_def correct funct_OT_12_def lossless_funct_OT_12 bind_spmf_const split_def)
+  have "(S1 = (\<not> S5)) = (S1 = (S5 = (\<not> m))) = m" for S1 S5 m by blast
+  thus ?thesis 
+    by(auto simp add: ot12_correct_unfold bind_spmf_const ot12_correct)
 qed
 
-lemma OT_14_correct: "OT_14.correctness M C"
-  unfolding OT_14.correctness_def 
-  using correctness_OT_14 by auto
-
-lemma OT_14_P2_sec: "OT_14.perfect_sec_P2 m1 m2"
-  unfolding OT_14.perfect_sec_P2_def
-  using P2_sec_OT_14 by blast
-
-lemma OT_14_P1_sec: "OT_14.adv_P1 m1 m2 D \<le> 3 * adv_OT12"
-  unfolding OT_14.adv_P1_def  
-  by (metis reduction_P1 surj_pair) 
+lemma ot14_correct: "ot14_correct.correctness [M4 (m0,m1,m2,m3), C2 (c0,c1)]"
+  unfolding ot14_correct.correctness_def
+  using ot14_correct_unfold by simp
 
 end
 
-locale OT_14_asymp = sim_det_def +
-  fixes S1_OT12 :: "nat \<Rightarrow> (bool \<times> bool) \<Rightarrow> unit \<Rightarrow> 'v_OT121 spmf"
-    and R1_OT12 :: "nat \<Rightarrow> (bool \<times> bool) \<Rightarrow> bool \<Rightarrow> 'v_OT121 spmf" 
-    and adv_OT12 :: "nat \<Rightarrow> real"
-    and S2_OT12 :: "nat \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> 'v_OT122 spmf" 
-    and R2_OT12 :: "nat \<Rightarrow> (bool \<times> bool) \<Rightarrow> bool \<Rightarrow> 'v_OT122 spmf"
-    and protocol_OT12 :: "(bool \<times> bool) \<Rightarrow> bool \<Rightarrow> (unit \<times> bool) spmf"
-  assumes ot14_base: "\<And> (n::nat). ot14_base (S1_OT12 n) (R1_12_0T n) (adv_OT12 n) (S2_OT12 n) (R2_12OT n) (protocol_OT12)"
+locale OT_14_asymp =
+  fixes R1_OT12 :: "nat \<Rightarrow> inputs_ot12 list \<Rightarrow> 'ot12_view1 spmf"
+    and S1_OT12 :: "nat \<Rightarrow> inputs_ot12 \<Rightarrow> outputs \<Rightarrow> 'ot12_view1 spmf"
+    and R2_OT12 :: "nat \<Rightarrow> inputs_ot12 list \<Rightarrow> 'ot12_view2 spmf"
+    and S2_OT12 :: "nat \<Rightarrow> inputs_ot12 \<Rightarrow> outputs \<Rightarrow> 'ot12_view2 spmf"
+    and protocol_ot12 :: "nat \<Rightarrow> inputs_ot12 list \<Rightarrow> outputs list spmf"
+    and ot12_adv_P1 :: "nat \<Rightarrow> real"
+  assumes ot14_base: "\<And> (n::nat).ot14_base (R1_OT12 n) (S1_OT12 n) (R2_OT12 n) (S2_OT12 n) (protocol_ot12 n) (ot12_adv_P1 n)"
 begin 
 
-sublocale ot14_base "(S1_OT12 n)" "(R1_12_0T n)" "(adv_OT12 n)" "(S2_OT12 n)" "(R2_12OT n)" using local.ot14_base by simp
+sublocale ot14_base "(R1_OT12 n)" "(S1_OT12 n)" "(R2_OT12 n)" "(S2_OT12 n)" "(protocol_ot12 n)" "(ot12_adv_P1 n)" 
+  using local.ot14_base by simp
 
-lemma OT_14_P1_sec: "OT_14.adv_P1 (R1_12_0T n) n m1 m2 D \<le> 3 * (adv_OT12 n)"
-  unfolding OT_14.adv_P1_def using reduction_P1 surj_pair by metis
+lemma bound_P1: "ot14_P1.advantage n [M4 (m0,m1,m2,m3), C2 (c0,c1)] D \<le> 3 * (ot12_adv_P1 n)"
+  by(rule ot14_secuirty_P1) 
 
-theorem OT_14_P1_asym_sec: "negligible (\<lambda> n. OT_14.adv_P1 (R1_12_0T n) n m1 m2 D)" if "negligible (\<lambda> n. adv_OT12 n)"
+theorem OT_14_P1_asym_sec: "negligible (\<lambda> n. ot14_P1.advantage n [M4 (m0,m1,m2,m3), C2 (c0,c1)] D)" if "negligible (\<lambda> n. ot12_adv_P1 n)"
 proof-
-  have adv_neg: "negligible (\<lambda>n. 3 * adv_OT12 n)" using that negligible_cmultI by simp
-  have "\<bar>OT_14.adv_P1 (R1_12_0T n) n m1 m2 D\<bar> \<le> \<bar>3 * (adv_OT12 n)\<bar>" for n 
+  have adv_neg: "negligible (\<lambda>n. 3 * ot12_adv_P1 n)" using that negligible_cmultI by simp
+  have "\<bar>ot14_P1.advantage n [M4 (m0,m1,m2,m3), C2 (c0,c1)] D\<bar> \<le> \<bar>3 * (ot12_adv_P1 n)\<bar>" for n 
   proof -
-    have "\<bar>OT_14.adv_P1 (R1_12_0T n) n m1 m2 D\<bar> \<le> 3 * adv_OT12 n"
-      using OT_14.adv_P1_def OT_14_P1_sec by auto
+    have "\<bar>ot14_P1.advantage n [M4 (m0,m1,m2,m3), C2 (c0,c1)] D\<bar> \<le> 3 * ot12_adv_P1 n"
+      using ot14_P1.advantage_def ot14_base.ot14_secuirty_P1 ot14_base_axioms bound_P1 by auto
     then show ?thesis
       by (meson abs_ge_self order_trans)
   qed
-  thus ?thesis using OT_14_P1_sec negligible_le adv_neg 
+  thus ?thesis using bound_P1 negligible_le adv_neg 
     by (metis (no_types, lifting) negligible_absI)
 qed
 
-theorem OT_14_P2_asym_sec: "OT_14.perfect_sec_P2 R2_OT12 n m1 m2"
-  using OT_14_P2_sec by simp
+theorem ot14_: "ot14_P2.perfect_security n [M4 (m0,m1,m2,m3), C2 (c0,c1)]"
+  by(rule ot14_security_P2)
+
+theorem ot14_correct: "ot14_correct.correctness n [M4 (m0,m1,m2,m3), C2 (c0,c1)]"
+  by(rule ot14_correct)
 
 end
 
 end
-
-
