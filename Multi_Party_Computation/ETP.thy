@@ -18,7 +18,6 @@ locale etp =
     and F :: "'index \<Rightarrow> ('range \<Rightarrow> 'range)" \<comment> \<open>permutation\<close>
     and F\<^sub>i\<^sub>n\<^sub>v :: "'index \<Rightarrow> 'trap \<Rightarrow> 'range \<Rightarrow> 'range" \<comment> \<open>must be efficiently computable\<close>
     and B :: "'index \<Rightarrow> 'range \<Rightarrow> bool" \<comment> \<open>hard core predicate\<close>
-    and D :: "('index,'input,'bool) dist2"
   assumes dom_eq_ran: "y \<in> set_spmf I \<longrightarrow> domain (fst y) = range (fst y)"
     and finite_range: "y \<in> set_spmf I \<longrightarrow> finite (range (fst y))" 
     and non_empty_range: "y \<in> set_spmf I \<longrightarrow> range (fst y) \<noteq> {}" 
@@ -70,16 +69,16 @@ qed
 
 text\<open>We define the security property of the hard core predicate (HCP) using a game.\<close>
 
-definition HCP_game :: "('index,'range, 'bool,'output,'input) advP2 \<Rightarrow> 'input \<Rightarrow> 'output \<Rightarrow> bool spmf"
-  where "HCP_game A \<sigma> b\<^sub>\<sigma> = do {
+definition HCP_game :: "('index,'range, 'bool,'output,'input) advP2 \<Rightarrow> 'input \<Rightarrow> 'output \<Rightarrow> ('index,'input,'bool) dist2 \<Rightarrow> bool spmf"
+  where "HCP_game A \<sigma> b\<^sub>\<sigma> D = do {
     (\<alpha>, \<tau>) \<leftarrow> I;
     x \<leftarrow> S \<alpha>;
     b' \<leftarrow> A D \<alpha> \<sigma> b\<^sub>\<sigma> x;
     let b = B \<alpha> (F\<^sub>i\<^sub>n\<^sub>v \<alpha> \<tau> x);
     return_spmf (b = b')}"
 
-definition HCP_adv :: "('index,'range, 'bool,'output,'input) advP2 \<Rightarrow> 'input \<Rightarrow> 'output \<Rightarrow> real"
-  where "HCP_adv A \<sigma> b\<^sub>\<sigma> = \<bar>((spmf (HCP_game A \<sigma> b\<^sub>\<sigma>) True) - 1/2)\<bar>" 
+definition HCP_adv :: "('index,'range, 'bool,'output,'input) advP2  \<Rightarrow>  'input \<Rightarrow> 'output \<Rightarrow> ('index,'input,'bool) dist2 \<Rightarrow> real"
+  where "HCP_adv A \<sigma> b\<^sub>\<sigma> D = \<bar>((spmf (HCP_game A \<sigma> b\<^sub>\<sigma> D) True) - 1/2)\<bar>" 
 
 end
 

@@ -23,13 +23,9 @@ type_synonym advP2 = "index \<Rightarrow> bool \<Rightarrow> bool \<Rightarrow> 
 locale rsa_base = 
   fixes prime_set :: "nat set" \<comment> \<open>the set of primes used\<close>
     and B :: "index \<Rightarrow> nat \<Rightarrow> bool"
-    and D1 :: "(inputs \<times> range \<times> range) \<Rightarrow> bool spmf"
-    and D2 :: "(inputs \<times> index \<times> bool \<times> bool) \<Rightarrow> bool spmf"
   assumes prime_set_ass: "prime_set \<subseteq> {x. prime x \<and> x > 2}"
     and finite_prime_set: "finite prime_set" 
     and prime_set_gt_2: "card prime_set > 2"
-    and lossless_D1: "lossless_spmf (D1 view1)"
-    and lossless_D2: "lossless_spmf (D2 view2)"
 begin
 
 lemma prime_set_non_empty: "prime_set \<noteq> {}" 
@@ -655,21 +651,22 @@ sublocale etp_rsa: etp I domain range F F\<^sub>i\<^sub>n\<^sub>v
    apply (metis fst_conv lessThan_iff mem_simps(2) nat_0_less_mult_iff prime_gt_0_nat range_def set_spmf_I_N)
   by (simp add: range_def rsa_inv_set_spmf_I)
 
-sublocale etp_ot12: ETP_ot12_base I domain range B F F\<^sub>i\<^sub>n\<^sub>v D2 D1
-  unfolding ETP_ot12_base_def ETP_ot12_base_axioms_def
-  by (auto simp add: etp_rsa.etp_axioms lossless_D1 lossless_D2)
+sublocale etp_ot12: ETP_ot12_base I domain range B F F\<^sub>i\<^sub>n\<^sub>v 
+  unfolding ETP_ot12_base_def 
+  by (auto simp add: etp_rsa.etp_axioms)
 
 text\<open>After proving the RSA collection is an ETP the proofs of security come easily from the general proofs.\<close>
 
-lemma correctness_rsa: "etp_ot12.ot12_correct.correctness [M (b0, b1),  C \<sigma>]"
+lemma correctness_rsa: "etp_ot12.ot12_correct.correctness [M (b0, b1), C \<sigma>]"
   by (rule etp_ot12.correct)
 
 lemma perfect_security_P1: "etp_ot12.ot12_party1.perfect_security [M (b0, b1),  C \<sigma>]"
   by (rule etp_ot12.perfect_security_P1)
 
 lemma security_P2:
-  assumes "etp_ot12.etp.HCP_adv etp_ot12.\<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) \<le> HCP_ad"
-  shows "etp_ot12.ot12_party2.advantage [M (b0, b1),  C \<sigma>] \<le> 2 * HCP_ad"
+  assumes "etp_rsa.HCP_adv etp_ot12.\<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2 \<le> HCP_ad"
+    and lossless_D2: "\<forall>view. lossless_spmf (D2 view)"
+  shows "etp_ot12.ot12_party2.advantage [M (b0, b1), C \<sigma>] D2 \<le> 2 * HCP_ad"
   using assms etp_ot12.P2_security by simp
 
 end 
@@ -677,12 +674,10 @@ end
 locale rsa_asym =
   fixes prime_set :: "nat \<Rightarrow> nat set"
     and B :: "index \<Rightarrow> nat \<Rightarrow> bool"
-    and D1 :: "(inputs \<times> range \<times> range) \<Rightarrow> bool spmf"
-    and D2 :: "(inputs \<times> index \<times> bool \<times> bool) \<Rightarrow> bool spmf"
-  assumes rsa_proof_assm: "rsa_base (prime_set n) D1 D2"
+  assumes rsa_proof_assm: "rsa_base (prime_set n)"
 begin
 
-sublocale rsa_base "(prime_set n)" B D1 D2 
+sublocale rsa_base "(prime_set n)" B 
   using local.rsa_proof_assm  by simp
 
 lemma 
@@ -693,20 +688,22 @@ lemma perfect_security_P1: "etp_ot12.ot12_party1.perfect_security n [M (b0, b1),
   by (rule etp_ot12.perfect_security_P1)
 
 lemma security_P2:
-  assumes "etp_ot12.etp.HCP_adv n etp_ot12.\<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) \<le> HCP_ad"
-  shows "etp_ot12.ot12_party2.advantage n [M (b0, b1),  C \<sigma>] \<le> 2 * HCP_ad"
+  assumes "etp_rsa.HCP_adv n etp_ot12.\<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2 \<le> HCP_ad"
+    and lossless_D2: "\<forall>view. lossless_spmf (D2 view)"
+  shows "etp_ot12.ot12_party2.advantage n [M (b0, b1),  C \<sigma>] D2 \<le> 2 * HCP_ad"
   using assms etp_ot12.P2_security by simp
 
 lemma P2_sec_asym: 
   assumes HCP_adv_neg: "negligible (\<lambda> n. etp_advantage n)"
-    and etp_adv_bound: "\<forall> n. etp_ot12.etp.HCP_adv n etp_ot12.\<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) \<le> etp_advantage n"
-  shows "negligible (\<lambda> n. etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>])" 
+    and etp_adv_bound: "\<forall> n. etp_rsa.HCP_adv n etp_ot12.\<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2 \<le> etp_advantage n"
+    and lossless_D2: "\<forall>view. lossless_spmf (D2 view)"
+  shows "negligible (\<lambda> n. etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2)" 
 proof-
   have "negligible (\<lambda> n. 2 * etp_advantage n)" using HCP_adv_neg 
     by (simp add: negligible_cmultI)
-  moreover have "\<bar>etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>]\<bar> = etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>]" 
+  moreover have "\<bar>etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2\<bar> = etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2" 
     for n unfolding etp_ot12.ot12_party2.advantage_def  by linarith
-  moreover have "etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>] \<le> 2 * etp_advantage n" for n
+  moreover have "etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2 \<le> 2 * etp_advantage n" for n
     using security_P2 assms by blast
   ultimately show ?thesis 
     using assms negligible_le by presburger 

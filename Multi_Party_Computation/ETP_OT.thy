@@ -4,7 +4,6 @@ text\<open>Here we construct the OT protocol based on ETPs given in \cite{DBLP:b
 semi honest security for both parties. We show information theoretic security for Party 1 and reduce the security of 
 Party 2 to the HCP assumption.\<close>
 
-
 theory ETP_OT imports
   "HOL-Number_Theory.Cong"
   ETP
@@ -40,18 +39,13 @@ lemma if_else_True [simp]: "(if b then x else True) \<longleftrightarrow> (b \<l
 lemma inj_on_Not [simp]: "inj_on Not A"
   by(auto simp add: inj_on_def)
 
-locale ETP_ot12_base = etp: etp I domain range F F\<^sub>i\<^sub>n\<^sub>v B D2 
+locale ETP_ot12_base = etp: etp I domain range F F\<^sub>i\<^sub>n\<^sub>v B
   for I :: "('index \<times> 'trap) spmf" \<comment> \<open>samples index and trapdoor\<close>
     and domain :: "'index \<Rightarrow> 'range set" 
     and range :: "'index \<Rightarrow> 'range set"
     and B :: "'index \<Rightarrow> 'range \<Rightarrow> bool" \<comment> \<open>hard core predicate\<close>
     and F :: "'index \<Rightarrow> 'range \<Rightarrow> 'range"
     and F\<^sub>i\<^sub>n\<^sub>v :: "'index \<Rightarrow> 'trap \<Rightarrow> 'range \<Rightarrow> 'range"
-    and D2 :: "(inputs \<times> 'index \<times> bool \<times> bool) \<Rightarrow> bool spmf"
-    +
-  fixes D1 :: "'range dist1"
-  assumes lossless_D1: "lossless_spmf (D1 view1)"
-    and lossless_D2: "lossless_spmf (D2 view2)"
 begin
 
 text\<open>The probabilistic program that defines the protocol.\<close>
@@ -132,7 +126,7 @@ lemma lossless_S2: "lossless_spmf (S2 (C \<sigma>) (P b\<^sub>\<sigma>))"
 text \<open> Security for Party 1 \<close>
 
 text\<open>We have information theoretic security for Party 1.\<close>
-term "S1"
+
 lemma P1_security: "R1 [M (b0, b1), C \<sigma>] = f_ot12 [M (b0, b1), C \<sigma>] \<bind> (\<lambda> outputs. S1 (nth [M (b0, b1), C \<sigma>] 0) (nth outputs 0))" 
   including monad_normalisation
 proof-
@@ -163,17 +157,13 @@ fun \<A> :: "('index, 'range) advP2"
     d \<leftarrow> D'(C \<sigma>, \<alpha>, \<beta>\<^sub>\<sigma>, \<beta>\<^sub>\<sigma>');
     return_spmf(if d then (\<beta>\<^sub>\<sigma>') else (\<not> \<beta>\<^sub>\<sigma>'))}"
 
-lemma lossless_\<A>: 
-  shows "y \<in> set_spmf I \<longrightarrow> lossless_spmf (\<A> D2 (fst y) (C \<sigma>) (P b\<^sub>\<sigma>) x)"
-  by(auto simp add: etp.lossless_S lossless_D2 )
-
 lemma assm_bound_f_ot12: 
-  assumes "etp.HCP_adv \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) \<le> HCP_ad"
+  assumes "etp.HCP_adv \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D \<le> HCP_ad"
   shows "\<bar>spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. 
-              etp.HCP_game \<A> (C \<sigma>) (nth outputs 1))) True - 1/2\<bar> \<le> HCP_ad"
+              etp.HCP_game \<A> (C \<sigma>) (nth outputs 1) D)) True - 1/2\<bar> \<le> HCP_ad"
 (is "?lhs \<le> HCP_ad")
 proof-
-  have "?lhs = \<bar>spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0))) True - 1/2\<bar>" 
+  have "?lhs = \<bar>spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D) True - 1/2\<bar>" 
     by(simp add: f_ot12_def)
   thus ?thesis 
     using assms
@@ -181,10 +171,10 @@ proof-
 qed
 
 lemma assm_bound_f_ot12_collapse: 
-  assumes "\<forall> b\<^sub>\<sigma>. etp.HCP_adv \<A> (C \<sigma>) (P b\<^sub>\<sigma>) \<le> HCP_ad"
-  shows "\<bar>spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. etp.HCP_game \<A> (C \<sigma>) (nth outputs 1))) True - 1/2\<bar> \<le> HCP_ad"
+  assumes "\<forall> b\<^sub>\<sigma>. etp.HCP_adv \<A> (C \<sigma>) (P b\<^sub>\<sigma>) D \<le> HCP_ad"
+  shows "\<bar>spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. etp.HCP_game \<A> (C \<sigma>) (nth outputs 1) D)) True - 1/2\<bar> \<le> HCP_ad"
 proof -
-  have "\<bar>spmf (ETP_OT.f_ot12 [M (b0, b1), C \<sigma>] \<bind> (\<lambda>zs. local.etp.HCP_game \<A> (C \<sigma>) (zs ! 1))) True - 1 / 2\<bar> \<le> HCP_ad \<or> local.etp.HCP_adv \<A> (C \<sigma>) (if \<sigma> then P b1 else P b0) \<le> HCP_ad"
+  have "\<bar>spmf (ETP_OT.f_ot12 [M (b0, b1), C \<sigma>] \<bind> (\<lambda>zs. local.etp.HCP_game \<A> (C \<sigma>) (zs ! 1) D)) True - 1 / 2\<bar> \<le> HCP_ad \<or> local.etp.HCP_adv \<A> (C \<sigma>) (if \<sigma> then P b1 else P b0) D \<le> HCP_ad"
     using assms by presburger
   then show ?thesis
     using assm_bound_f_ot12 by blast
@@ -194,7 +184,7 @@ text \<open> To prove security for party 2 we split the proof on the cases on pa
 
 lemma R2_S2_False:
   assumes "((if \<sigma> then b0 else b1) = False)" 
-  shows "spmf (R2 [M (b0, b1),  C \<sigma>] \<bind> D2) True 
+  shows "spmf (R2 [M (b0, b1),  C \<sigma>] \<bind> (D2::(inputs \<times> 'index \<times> (bool \<times> bool)) \<Rightarrow> bool spmf)) True 
                 = spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. S2 (C \<sigma>) (nth outputs 1) \<bind> D2)) True"
 proof-
   have "\<sigma> \<Longrightarrow> \<not> b0" using assms by simp
@@ -205,14 +195,15 @@ qed
 
 lemma R2_S2_True:
   assumes "((if \<sigma> then b0 else b1) = True)" 
-  shows "\<bar>(spmf (bind_spmf (R2 [M (b0, b1),  C \<sigma>]) D2) True) - spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. S2 (C \<sigma>) (nth outputs 1) \<bind> (\<lambda> view. D2 view))) True\<bar>
-                         = \<bar>2*((spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0))) True) - 1/2)\<bar>"
+    and lossless_D2: "\<forall> view. lossless_spmf (D2 view)"
+  shows "\<bar>(spmf (bind_spmf (R2 [M (b0, b1),  C \<sigma>]) (D2::(inputs \<times> 'index \<times> (bool \<times> bool)) \<Rightarrow> bool spmf)) True) - spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. S2 (C \<sigma>) (nth outputs 1) \<bind> (\<lambda> view. D2 view))) True\<bar>
+                         = \<bar>2*((spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2) True) - 1/2)\<bar>"
 proof-
   have  "(spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. S2 (C \<sigma>) (nth outputs 1) \<bind> D2)) True
               - spmf (bind_spmf (R2 [M (b0, b1),  C \<sigma>]) D2) True) 
-                    = 2 * ((spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0))) True) - 1/2)"
+                    = 2 * ((spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2) True) - 1/2)"
   proof-
-    have  "((spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0))) True) - 1/2)  = 
+    have  "((spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2) True) - 1/2)  = 
                   1/2*(spmf (bind_spmf (S2 (C \<sigma>) (if \<sigma> then (P b1) else (P b0))) D2) True
                         - spmf (bind_spmf (R2 [M (b0, b1),  C \<sigma>]) D2) True)"
       including monad_normalisation
@@ -288,7 +279,7 @@ proof-
       return_spmf d}"
       have lossless_D_false: "lossless_spmf (D_false a b)"
         for a b by(auto simp add: D_false_def lossless_D2 split_def etp.lossless_I etp.lossless_S)
-      have "spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0))) True =  spmf (HCP_game_\<A> (C \<sigma>) (if \<sigma> then b1 else b0)) True" 
+      have "spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2) True =  spmf (HCP_game_\<A> (C \<sigma>) (if \<sigma> then b1 else b0)) True" 
         apply(simp add: etp.HCP_game_def HCP_game_\<A>_def split_def etp.F_f_inv)
         by(rewrite bind_commute_spmf[where q = "coin_spmf"]; rewrite bind_commute_spmf[where q = "coin_spmf"]; rewrite bind_commute_spmf[where q = "coin_spmf"]; auto)+
       also have "... = spmf (bind_spmf (map_spmf Not coin_spmf) (\<lambda>b. if b then HCP_game_true (C \<sigma>) (if \<sigma> then b1 else b0) else HCP_game_false (C \<sigma>) (if \<sigma> then b1 else b0))) True"
@@ -357,25 +348,23 @@ proof-
 qed
 
 lemma P2_adv_bound_unfold:
+  assumes lossless_D2: "\<forall> view. lossless_spmf (D2 view)"
   shows "\<bar>(spmf (bind_spmf (R2 [M (b0, b1),  C \<sigma>]) D2) True) - spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. S2 (C \<sigma>) (nth outputs 1) \<bind> (\<lambda> view. D2 view))) True\<bar>
-                         \<le> \<bar>2*((spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0))) True) - 1/2)\<bar>"
+                         \<le> \<bar>2*((spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2) True) - 1/2)\<bar>"
   apply(cases "(if \<sigma> then (b0) else (b1))")
    apply(auto simp only: split_def R2_S2_False) 
-  using  R2_S2_True 
-  by simp
+  using R2_S2_True assms by simp
 
 definition valid_inputs_ot12 :: "inputs list \<Rightarrow> bool"
   where "valid_inputs_ot12 inputs = True" 
 
-sublocale ot12_party1: semi_honest_det_security 0 f_ot12  R1 S1 valid_inputs_ot12 D1
-  unfolding semi_honest_det_security_def by(simp add: lossless_D1)
+sublocale ot12_party1: semi_honest_det_security 0 f_ot12  R1 S1 valid_inputs_ot12 .
 
 lemma perfect_security_P1: "ot12_party1.perfect_security [M (b0, b1), C \<sigma>]" 
   unfolding ot12_party1.perfect_security_def 
   using P1_security by(auto simp add: P1_security Let_def) 
 
-sublocale ot12_party2: semi_honest_det_security 1 f_ot12 R2 S2 valid_inputs_ot12 D2 
-  unfolding semi_honest_det_security_def by(simp add: lossless_D2)
+sublocale ot12_party2: semi_honest_det_security 1 f_ot12 R2 S2 valid_inputs_ot12 .
 
 sublocale ot12_correct: semi_honest_det_correctness f_ot12 protocol valid_inputs_ot12 .
 
@@ -384,20 +373,22 @@ lemma correct: "ot12_correct.correctness [M (b0, b1),  C \<sigma>]"
   using correctness by simp
 
 lemma P2_adv_bound:
-  shows "ot12_party2.advantage [M (b0, b1),  C \<sigma>] \<le> \<bar>2*((spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0))) True) - 1/2)\<bar>"
-  using P2_adv_bound_unfold unfolding ot12_party2.advantage_def 
+  assumes lossless_D2: "\<forall> view. lossless_spmf (D2 view)"
+  shows "ot12_party2.advantage [M (b0, b1),  C \<sigma>] D2 \<le> \<bar>2*((spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2) True) - 1/2)\<bar>"
+  using P2_adv_bound_unfold assms unfolding ot12_party2.advantage_def 
   by(auto simp add: split_def)
 
 lemma P2_security:
-  assumes "etp.HCP_adv \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) \<le> HCP_ad"
-  shows "ot12_party2.advantage [M (b0, b1),  C \<sigma>] \<le> 2 * HCP_ad"
+  assumes "etp.HCP_adv \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2 \<le> HCP_ad"
+    and lossless_D2: "\<forall> view. lossless_spmf (D2 view)"
+  shows "ot12_party2.advantage [M (b0, b1),  C \<sigma>] D2 \<le> 2 * HCP_ad"
 proof-
-  have *: "\<bar>2 * (spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. etp.HCP_game \<A> (C \<sigma>) (nth outputs 1))) True - 1/2)\<bar> 
-                = \<bar>2 * (spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0))) True - 1/2)\<bar>"
+  have *: "\<bar>2 * (spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. etp.HCP_game \<A> (C \<sigma>) (nth outputs 1) D2)) True - 1/2)\<bar> 
+                = \<bar>2 * (spmf (etp.HCP_game \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2) True - 1/2)\<bar>"
     by(simp add: f_ot12_def)
-  hence "ot12_party2.advantage [M (b0, b1),  C \<sigma>] \<le> \<bar>2*((spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. etp.HCP_game \<A> (C \<sigma>) (nth outputs 1))) True) - 1/2)\<bar>"
+  hence "ot12_party2.advantage [M (b0, b1), C \<sigma>] D2 \<le> \<bar>2*((spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. etp.HCP_game \<A> (C \<sigma>) (nth outputs 1) D2)) True) - 1/2)\<bar>"
     using P2_adv_bound assms by auto
-  moreover with * have "\<bar>2*((spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. etp.HCP_game \<A> (C \<sigma>) (nth outputs 1))) True) - 1/2)\<bar> \<le> \<bar>2*HCP_ad\<bar>" 
+  moreover with * have "\<bar>2*((spmf (f_ot12 [M (b0, b1),  C \<sigma>] \<bind> (\<lambda> outputs. etp.HCP_game \<A> (C \<sigma>) (nth outputs 1) D2)) True) - 1/2)\<bar> \<le> \<bar>2*HCP_ad\<bar>" 
     using assms 
     by (simp add: local.etp.HCP_adv_def)+
   moreover have "HCP_ad \<ge> 0" 
@@ -416,9 +407,7 @@ locale ETP_sec_para =
     and F :: "'index \<Rightarrow> 'range \<Rightarrow> 'range"
     and F\<^sub>i\<^sub>n\<^sub>v :: "'index \<Rightarrow> 'trap \<Rightarrow> 'range \<Rightarrow> 'range"
     and B :: "'index \<Rightarrow> 'range \<Rightarrow> bool"
-    and D2 :: "(inputs \<times> 'index \<times> bool \<times> bool) \<Rightarrow> bool spmf"
-    and D1 :: "'range dist1"
-  assumes ETP_base: "\<And> n. ETP_ot12_base (I n) domain range F F\<^sub>i\<^sub>n\<^sub>v D2 D1"
+  assumes ETP_base: "\<And> n. ETP_ot12_base (I n) domain range F F\<^sub>i\<^sub>n\<^sub>v"
 begin
 
 sublocale ETP_ot12_base "(I n)" domain range 
@@ -432,16 +421,17 @@ lemma P1_sec_asym: "ot12_party1.perfect_security n [M (b0, b1), C \<sigma>]"
 
 lemma P2_sec_asym: 
   assumes HCP_adv_neg: "negligible (\<lambda> n. etp_advantage n)"
-    and etp_adv_bound: "\<forall> n. etp.HCP_adv n \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) \<le> etp_advantage n"
-  shows "negligible (\<lambda> n. ot12_party2.advantage n [M (b0, b1), C \<sigma>])" 
+    and etp_adv_bound: "\<forall> n. etp.HCP_adv n \<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2 \<le> etp_advantage n"
+    and lossless_D2: "\<forall> view. lossless_spmf (D2 view)"
+  shows "negligible (\<lambda> n. ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2)" 
 proof-
   have "negligible (\<lambda> n. 2 * etp_advantage n)" using HCP_adv_neg 
     by (simp add: negligible_cmultI)
-  moreover have "\<bar>ot12_party2.advantage n [M (b0, b1), C \<sigma>]\<bar> = ot12_party2.advantage n [M (b0, b1), C \<sigma>]" 
+  moreover have "\<bar>ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2\<bar> = ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2" 
     for n unfolding ot12_party2.advantage_def by simp
-  moreover have  "ot12_party2.advantage n [M (b0, b1), C \<sigma>] \<le> 2 * etp_advantage n"  
+  moreover have  "ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2 \<le> 2 * etp_advantage n"  
     for n
-    using P2_security assms(2) 
+    using P2_security assms
     by blast
   ultimately show ?thesis 
     using assms negligible_le HCP_adv_neg P2_security by presburger
