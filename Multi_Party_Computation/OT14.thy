@@ -699,7 +699,7 @@ locale OT_14_asymp =
     and S2_OT12 :: "nat \<Rightarrow> inputs_ot12 \<Rightarrow> outputs \<Rightarrow> 'ot12_view2 spmf"
     and protocol_ot12 :: "nat \<Rightarrow> inputs_ot12 list \<Rightarrow> outputs list spmf"
     and ot12_adv_P1 :: "nat \<Rightarrow> real"
-  assumes ot14_base: "\<And> (n::nat).ot14_base (R1_OT12 n) (S1_OT12 n) (R2_OT12 n) (S2_OT12 n) (protocol_ot12 n) (ot12_adv_P1 n)"
+  assumes ot14_base: "\<And> (n::nat). ot14_base (R1_OT12 n) (S1_OT12 n) (R2_OT12 n) (S2_OT12 n) (protocol_ot12 n) (ot12_adv_P1 n)"
 begin 
 
 sublocale ot14_base "(R1_OT12 n)" "(S1_OT12 n)" "(R2_OT12 n)" "(S2_OT12 n)" "(protocol_ot12 n)" "(ot12_adv_P1 n)" 
