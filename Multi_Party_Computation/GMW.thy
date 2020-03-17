@@ -6,7 +6,7 @@ text\<open>We prove security for the gates of the GMW protocol in the semi hones
 theory GMW imports
   Semi_Honest
 begin
-
+(*TODO: secret sharing scheme stuff got taken out*)
 datatype gmw_outputs = Q bool
 
 datatype inputs_ot12 = M2 "(bool \<times> bool)" | C1 bool
