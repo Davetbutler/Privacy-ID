@@ -48,9 +48,9 @@ type_synonym input2 = "bool \<times> bool"
 type_synonym 'ot12_view1' view1 = "(inputs_ot14 \<times> (bool \<times> bool \<times> bool \<times> bool \<times> bool \<times> bool) \<times> 'ot12_view1' \<times> 'ot12_view1' \<times> 'ot12_view1')"
 type_synonym 'ot12_view2' view2 = "(inputs_ot14 \<times> (bool \<times> bool \<times> bool \<times> bool) \<times> 'ot12_view2' \<times> 'ot12_view2' \<times> 'ot12_view2')"
 
-locale gmw = ot14_1: semi_honest_det_security 0 f_ot14 R1_OT14 S1_OT14 valid_inputs_ot14 + 
-  ot14_2: semi_honest_det_security 1 f_ot14 R2_OT14 S2_OT14 valid_inputs_ot14 +
-  ot14: semi_honest_det_correctness f_ot14 protocol_ot14 valid_inputs_ot14
+locale gmw =   ot14: semi_honest_det_correctness f_ot14 protocol_ot14 valid_inputs_ot14 
+  + ot14_1: semi_honest_det_security protocol_ot14 f_ot14 valid_inputs_ot14 0 R1_OT14 S1_OT14 
+  + ot14_2: semi_honest_det_security protocol_ot14 f_ot14 valid_inputs_ot14 1 R2_OT14 S2_OT14
   for R1_OT14 :: "inputs_ot14 list \<Rightarrow> 'ot14_view1 spmf"
     and S1_OT14 
     and R2_OT14 :: "inputs_ot14 list \<Rightarrow> 'ot14_view2 spmf"
@@ -122,9 +122,6 @@ fun xor_protocol :: "share_wire list \<Rightarrow> bool list spmf"
     let (a2, b2) = B;
     return_spmf ([a1 \<oplus> a2, b1 \<oplus> b2])}"
 
-lemma "xor_funct [A,B] = xor_protocol [A,B]"
-  by(auto)
-
 fun valid_inptuts_xor where "valid_inptuts_xor [(a1, b1),(a2,b2)] = True"
 
 lemma share_xor_reconstruct: 
@@ -152,9 +149,14 @@ definition S2_xor :: "share_wire \<Rightarrow> bool \<Rightarrow> (bool \<times>
 lemma lossless_S2_xor: "lossless_spmf (S2_xor A out)" 
   by(simp add: S2_xor_def)
 
-sublocale gmw_xor_1: semi_honest_det_security 0 xor_funct R1_xor S1_xor valid_inptuts_xor .
+sublocale gmw_xor_correct: semi_honest_det_correctness xor_funct xor_protocol valid_inptuts_xor .
 
-sublocale gmw_xor_2: semi_honest_det_security 1 xor_funct R2_xor S2_xor valid_inptuts_xor .
+theorem correct_xor: "gmw_xor_correct.correctness [A,B]"
+  unfolding gmw_xor_correct.correctness_def by auto
+
+sublocale gmw_xor_1: semi_honest_det_security xor_protocol xor_funct valid_inptuts_xor 0 R1_xor S1_xor .
+
+sublocale gmw_xor_2: semi_honest_det_security xor_protocol xor_funct valid_inptuts_xor 1 R2_xor S2_xor .
 
 lemma "gmw_xor_1.perfect_security [s1, s2]"
   using gmw_xor_1.perfect_security_def by(simp add: split_def S1_xor_def)
@@ -369,8 +371,9 @@ qed
 lemma "gmw_and_2.perfect_security n [(a1,a2),(b1,b2)]"
   by(rule and_perfect_security_P2)
 
-lemma "and_protocol n [(a1, b1), (a2,b2)] = and_funct [(a1, b1), (a2,b2)]"
-  by(rule and_correct)
+lemma "gmw_and_1.correctness n [(a1, b1), (a2,b2)]"
+  unfolding gmw_and_1.correctness_def
+  using and_correct by simp
 
 end
 

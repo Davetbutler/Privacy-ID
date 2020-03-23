@@ -2,8 +2,6 @@ theory Semi_Honest imports
   CryptHOL.CryptHOL
 begin
 
-(*could abstractly define an extract function that gets the party's input from the input tuple*)
-
 locale semi_honest_prob = 
   fixes i :: nat
     and funct :: "'input list \<Rightarrow> ('output list) spmf"
@@ -38,22 +36,25 @@ definition "correctness inputs \<equiv> (valid_inputs inputs \<longrightarrow> f
 end 
 
 locale semi_honest_det_correctness = 
-  fixes funct :: "'inputs \<Rightarrow> 'outputs spmf"
-    and protocol :: "'inputs \<Rightarrow> 'outputs spmf"
-    and valid_inputs :: "'inputs \<Rightarrow> bool"
+  fixes funct :: "'input list \<Rightarrow> 'output list spmf"
+    and protocol :: "'input list \<Rightarrow> 'output list spmf"
+    and valid_inputs :: "'input list \<Rightarrow> bool"
 begin
 
 definition "correctness inputs \<equiv> (valid_inputs inputs \<longrightarrow> funct inputs = protocol inputs)"
 
 end 
 
-locale semi_honest_det_security = 
+locale semi_honest_det_security = protocol: semi_honest_det_correctness funct _ valid_inputs
+  for funct :: "'input list \<Rightarrow> 'output list spmf"
+    and valid_inputs :: "'input list \<Rightarrow> bool" 
+    +
   fixes i :: nat
-  fixes funct :: "'input list \<Rightarrow> ('output list) spmf"
     and real_view :: "'input list \<Rightarrow> 'view spmf" \<comment> \<open>the real view of the ith party\<close>
     and ideal_view :: "'input \<Rightarrow> 'output \<Rightarrow> 'view spmf"
-    and valid_inputs :: "'input list \<Rightarrow> bool" \<comment> \<open>D must be lossless, this is reasonable as the distinguisher is only used to define security, and is not an adversary\<close>
 begin
+
+sublocale protocol: semi_honest_det_correctness funct _ valid_inputs .
 
 definition advantage :: "'input list \<Rightarrow> ('view \<Rightarrow> bool spmf) \<Rightarrow> real"
   where "advantage inputs D \<equiv> \<bar>spmf (real_view inputs \<bind> D) True 

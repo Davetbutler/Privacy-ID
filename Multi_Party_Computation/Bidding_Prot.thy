@@ -1,35 +1,18 @@
 theory Bidding_Prot imports
   CryptHOL.CryptHOL
   "HOL-Number_Theory.Cong"
+  OT_Functionalities
   Semi_Honest
   Uniform_Sampling
 begin
-  (*could  introduce predicates like valid input s < q, b < q, d < q and reserve_met s b d = (b >= s \/ d >= s)*)
-sledgehammer_params[timeout = 1000]
 
 locale bidding_prot_base =
   fixes q :: nat
   assumes q_gt_0: "q > 0"
 begin
 
-datatype inputs_ot12 = M "(nat \<times> nat)" | C bool
-
-datatype outputs_ot = P nat | U unit
-
-fun output_ot_rev where "output_ot_rev (P n) = n"
-
-fun f_ot12 :: "inputs_ot12 list \<Rightarrow> (outputs_ot list) spmf"
-  where "f_ot12 [M (m0,m1), C \<sigma>] = return_spmf ([U (), if \<sigma> then (P m1) else (P m0)])"
-
-lemma f_ot12_if_unfold: "\<forall> a b x.(f_ot12 [M (if x then (a,b) else (b,a)), C x]) = return_spmf [U(), P b] "
-  by simp
-
-lemma f_ot12_if_unfold_neg: "\<forall> a b x.(f_ot12 [M (if (\<not> x) then (a,b) else (b,a)), C x]) = return_spmf [U(), P a] "
-  by simp
-
-
-fun valid_inputs_ot12 :: "inputs_ot12 list \<Rightarrow> bool"
-  where "valid_inputs_ot12 [M (b0, b1), C \<sigma>] = True" 
+fun valid_inputs_ot12 :: "nat inputs_ot12 list \<Rightarrow> bool"
+  where "valid_inputs_ot12 [M2 (b0, b1), C1 \<sigma>] = True" 
 
 lemma 1:
   assumes "rb' = (wb + rd') mod q" 
@@ -61,7 +44,7 @@ text\<open>The overall functionality for bidding.\<close>
 fun funct_bid :: "nat list \<Rightarrow> ((nat \<times> bool) list) spmf"
   where "funct_bid [s, b, d] = do {
         _ :: unit \<leftarrow> assert_spmf (Max {b,d} \<ge> s);
-        let out = (Max {b,d}, (Max {s,d} \<le> b));
+        let out = (Max {b,d}, (b \<ge> d));
         return_spmf ([out, out, out])}"
 
 fun valid_inputs_f_bid :: "nat list \<Rightarrow> bool"
@@ -139,21 +122,20 @@ lemma "f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] = do {
     return_spmf [out, out]}"
   by auto
 
-
 fun valid_inputs_mpc2 :: "inputs_mpc2 list \<Rightarrow> bool"
   where "valid_inputs_mpc2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] = (yd < q \<and> yb < q \<and> s < q)"
 
 end 
 
 locale bidding_prot = bidding_prot_base 
-  +  mpc1_1: semi_honest_prob 0 f_MPC1 protocol_MPC1 outputs_mpc1 randomness mpc1_view_1 S1_MPC1  valid_inputs_mpc1
+  +  mpc1_1: semi_honest_prob 0 f_MPC1 protocol_MPC1 outputs_mpc1 randomness mpc1_view_1 S1_MPC1 valid_inputs_mpc1
   +  mpc1_2: semi_honest_prob 1 f_MPC1 protocol_MPC1 outputs_mpc2 randomness mpc1_view_2 S2_MPC1 valid_inputs_mpc1 
   + mpc2: semi_honest_det_correctness f_MPC2 protocol_MPC2 valid_inputs_mpc2
-  + mpc2_1: semi_honest_det_security 0 f_MPC2 R1_MPC2 S1_MPC2 valid_inputs_mpc2  
-  + mpc2_2: semi_honest_det_security 1 f_MPC2 R2_MPC2 S2_MPC2 valid_inputs_mpc2 
+  + mpc2_1: semi_honest_det_security protocol_MPC2 f_MPC2 valid_inputs_mpc2 0 R1_MPC2 S1_MPC2  
+  + mpc2_2: semi_honest_det_security protocol_MPC2 f_MPC2 valid_inputs_mpc2 1 R2_MPC2 S2_MPC2 
   + ot12: semi_honest_det_correctness f_ot12 protocol_OT12 valid_inputs_ot12
-  + ot12_1: semi_honest_det_security 0 f_ot12 R1_OT12_1 S1_OT12_1 valid_inputs_ot12 
-  + ot12_2: semi_honest_det_security 1 f_ot12 R2_OT12_1 S2_OT12_1 valid_inputs_ot12 
+  + ot12_1: semi_honest_det_security protocol_OT12 f_ot12 valid_inputs_ot12 0 R1_OT12_1 S1_OT12_1 
+  + ot12_2: semi_honest_det_security protocol_OT12 f_ot12 valid_inputs_ot12 1 R2_OT12_1 S2_OT12_1 
   for  "protocol_MPC1" 
     and "mpc1_view_1"
     and "S1_MPC1" 
@@ -170,11 +152,11 @@ locale bidding_prot = bidding_prot_base
     +  
   assumes MPC1_correct: "protocol_MPC1 [b, d] = f_MPC1 [b, d]"
     and MPC2_correct: "mpc2.correctness [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)]"
-    and OT12_correct: "ot12.correctness [M msgs, C \<sigma>]"
+    and OT12_correct: "ot12.correctness [M2 msgs, C1 \<sigma>]"
     and MPC1_1: "mpc1_1.perfect_security [m1, m2]"
     and MPC1_2: "mpc1_2.perfect_security [m1, m2]"
-    and OT12_sec_P1: "ot12_1.perfect_security [M msgs, C \<sigma>]"
-    and OT12_sec_P2: "ot12_2.perfect_security [M msgs, C \<sigma>]"
+    and OT12_sec_P1: "ot12_1.perfect_security [M2 msgs, C1 \<sigma>]"
+    and OT12_sec_P2: "ot12_2.perfect_security [M2 msgs, C1 \<sigma>]"
     and MPC2_sec_P1: "mpc2_1.perfect_security [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)]"
     and MPC2_sec_P2: "mpc2_2.perfect_security [D_mpc2 (xd,yd), S_mpc2(s,xb,yb)]"
 begin
@@ -184,13 +166,13 @@ lemma MPC2_correct_unfold: "\<forall> xd yd s xb yb. valid_inputs_mpc2 [D_mpc2 (
   using MPC2_correct[unfolded mpc2.correctness_def] by simp
 
 lemma OT12_1_1: 
-  assumes "valid_inputs_ot12 [M (m0,m1), C \<sigma>]" 
-  shows "R1_OT12_1 [M (m0,m1), C \<sigma>] = f_ot12 [M (m0,m1), C \<sigma>] \<bind> (\<lambda> outputs. S1_OT12_1 (M (m0,m1)) (nth outputs 0))"
-  using OT12_sec_P1[unfolded ot12_1.perfect_security_def] assms by(auto simp add: split_def)
+  assumes "valid_inputs_ot12 [M2 (m0,m1), C1 \<sigma>]" 
+  shows "R1_OT12_1 [M2 (m0,m1), C1 \<sigma>] = f_ot12 [M2 (m0,m1), C1 \<sigma>] \<bind> (\<lambda> outputs. S1_OT12_1 (M2 (m0,m1)) (nth outputs 0))"
+  using OT12_sec_P1[unfolded ot12_1.perfect_security_def] assms by fastforce
 
 lemma OT12_2_1: 
-  assumes "valid_inputs_ot12 [M (m0,m1), C \<sigma>]" 
-  shows "R2_OT12_1 [M (m0,m1), C \<sigma>] = f_ot12 [M (m0,m1), C \<sigma>] \<bind> (\<lambda> outputs. S2_OT12_1 (C \<sigma>) (nth outputs 1))"
+  assumes "valid_inputs_ot12 [M2 (m0,m1), C1 \<sigma>]" 
+  shows "R2_OT12_1 [M2 (m0,m1), C1 \<sigma>] = f_ot12 [M2 (m0,m1), C1 \<sigma>] \<bind> (\<lambda> outputs. S2_OT12_1 (C1 \<sigma>) (nth outputs 1))"
   using OT12_sec_P2[unfolded ot12_2.perfect_security_def] assms by(auto simp add: split_def)
 
 lemma MPC2_1: 
@@ -208,9 +190,9 @@ lemma MPC2_2_all:
   using MPC2_sec_P2[unfolded mpc2_2.perfect_security_def] valid_inputs_mpc2.simps by simp
 
 lemma OT12_2_sec_all : 
-  assumes "valid_inputs_ot12 [M (m0,m1), C \<sigma>]" 
-  shows "R2_OT12_1 [M (m0,m1), C \<sigma>] = f_ot12 [M (m0,m1), C \<sigma>] \<bind> (\<lambda> outputs. S2_OT12_1 (C \<sigma>) (nth outputs 1))"
-  using OT12_2_1 assms by auto
+  assumes "valid_inputs_ot12 [M2 (m0,m1), C1 \<sigma>]" 
+  shows "R2_OT12_1 [M2 (m0,m1), C1 \<sigma>] = f_ot12 [M2 (m0,m1), C1 \<sigma>] \<bind> (\<lambda> outputs. S2_OT12_1 (C1 \<sigma>) (nth outputs 1))"
+  using OT12_2_1 assms by fastforce
 
 lemma perfect_1_MPC1_unfold:
   assumes "valid_inputs_mpc1 [b,d]"
@@ -222,13 +204,14 @@ lemma perfect_2_MPC1_unfold:
   shows "mpc1_2.real_view [b, d]  = mpc1_2.ideal_view [b, d]"
   using MPC1_2[unfolded mpc1_2.perfect_security_def] assms by simp
 
-lemma OT12_correct_all: "\<forall> m0 m1 \<sigma>. valid_inputs_ot12 [M (m0,m1), C \<sigma>] \<longrightarrow> protocol_OT12 [M (m0,m1), C \<sigma>] = f_ot12 [M (m0,m1), C \<sigma>]" 
-  using OT12_correct[unfolded ot12.correctness_def] by force
+lemma OT12_correct_all: "\<forall> m0 m1 \<sigma>. valid_inputs_ot12 [M2 (m0,m1), C1 \<sigma>] \<longrightarrow> protocol_OT12 [M2 (m0,m1), C1 \<sigma>] = f_ot12 [M2 (m0,m1), C1 \<sigma>]" 
+  using OT12_correct[unfolded ot12.correctness_def] 
+  by fastforce
 
 lemma OT12_1_unfold: 
-  assumes "valid_inputs_ot12 [M (m0,m1), C \<sigma>]"
-  shows "R1_OT12_1 [M (m0,m1), C \<sigma>] = S1_OT12_1 (M (m0,m1)) (U ())" 
-  using OT12_1_1 assms by auto
+  assumes "valid_inputs_ot12 [M2 (m0,m1), C1 \<sigma>]"
+  shows "R1_OT12_1 [M2 (m0,m1), C1 \<sigma>] = S1_OT12_1 (M2 (m0,m1)) (U_ot12 ())" 
+  using OT12_1_1 assms by fastforce
 
 fun protocol_bid :: "nat list \<Rightarrow> ((nat \<times> bool) list) spmf"
   where "protocol_bid [s, b, d] = do {
@@ -237,11 +220,11 @@ fun protocol_bid :: "nat list \<Rightarrow> ((nat \<times> bool) list) spmf"
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> protocol_OT12 [M input1, C xd];
+    outputs \<leftarrow> protocol_OT12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> protocol_OT12 [M input1', C xb]; 
+    outputs' \<leftarrow> protocol_OT12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);    
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
@@ -257,11 +240,11 @@ fun R_S_bid :: "nat list \<Rightarrow> (nat \<times> bool \<times> nat \<times> 
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> protocol_OT12 [M input1, C xd];
+    outputs \<leftarrow> protocol_OT12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> protocol_OT12 [M input1', C xb]; 
+    outputs' \<leftarrow> protocol_OT12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);   
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
@@ -289,7 +272,7 @@ definition S_S_bid :: "nat \<Rightarrow> (nat \<times> bool) \<Rightarrow> (nat 
 
 sublocale bid_prot_correct: semi_honest_det_correctness funct_bid protocol_bid valid_inputs_f_bid .
 
-sublocale bid_prot_S: semi_honest_det_security 0 funct_bid R_S_bid S_S_bid valid_inputs_f_bid  .
+sublocale bid_prot_S: semi_honest_det_security _ funct_bid valid_inputs_f_bid 0 R_S_bid S_S_bid   .
 
 lemma 44:
   assumes "xa < q" and "xb < q" and "wb < q" 
@@ -425,11 +408,11 @@ proof-
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs_ot12 \<leftarrow> f_ot12 [M input1, C xd];
+    outputs_ot12 \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs_ot12 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs_ot12' \<leftarrow> f_ot12 [M input1', C xb]; 
+    outputs_ot12' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs_ot12' 1);  
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
@@ -799,12 +782,6 @@ proof-
   qed
 qed
 
-lemma perfect_security_S:
-  assumes "s < q" and "b < q" and "d < q"
-  shows "bid_prot_S.perfect_security [s, b, d]"
-  using S_corrupt assms unfolding bid_prot_S.perfect_security_def  
-  by(auto simp add: split_def)
-
 fun R_B_bid :: "nat list \<Rightarrow> (nat \<times> 'b \<times> bool \<times> nat \<times> 'f \<times> 'g \<times> nat \<times> bool \<times> nat) spmf"
   where "R_B_bid [s, b, d] = do {
     (view_MPC1, outputs_mpc1) \<leftarrow> mpc1_1.real_view [b, d];
@@ -812,13 +789,13 @@ fun R_B_bid :: "nat list \<Rightarrow> (nat \<times> 'b \<times> bool \<times> n
     let xd = (nth outputs_mpc1 1);
     rb \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    view1_OT12 :: 'f \<leftarrow> R1_OT12_1 [M input1, C xd];
-    outputs \<leftarrow> protocol_OT12 [M input1, C xd];
+    view1_OT12 :: 'f \<leftarrow> R1_OT12_1 [M2 input1, C1 xd];
+    outputs \<leftarrow> protocol_OT12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    view2_OT12 :: 'g \<leftarrow> R2_OT12_1 [M input1', C xb];
-    outputs' \<leftarrow> protocol_OT12 [M input1', C xb]; 
+    view2_OT12 :: 'g \<leftarrow> R2_OT12_1 [M2 input1', C1 xb];
+    outputs' \<leftarrow> protocol_OT12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);   
     let yd = (rd + rd') mod q;   
     let yb = (rb + rb') mod q;
@@ -833,13 +810,13 @@ fun R_D_bid :: "nat list \<Rightarrow> (nat \<times> 'c \<times> bool \<times> '
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
-    view2_OT12  \<leftarrow> R2_OT12_1 [M input1, C xd];
-    outputs \<leftarrow> protocol_OT12 [M input1, C xd];
+    view2_OT12  \<leftarrow> R2_OT12_1 [M2 input1, C1 xd];
+    outputs \<leftarrow> protocol_OT12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    view1_OT12 :: 'f \<leftarrow> R1_OT12_1 [M input1', C xb];
-    outputs' \<leftarrow> protocol_OT12 [M input1', C xb]; 
+    view1_OT12 :: 'f \<leftarrow> R1_OT12_1 [M2 input1', C1 xb];
+    outputs' \<leftarrow> protocol_OT12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1); 
     let yd = (rd + rd') mod q; 
     let yb = (rb + rb') mod q;
@@ -857,10 +834,10 @@ definition S_D_bid :: "nat \<Rightarrow> (nat \<times> bool) \<Rightarrow> (nat 
         let xb = w \<oplus> xd;
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb \<leftarrow> sample_uniform q; 
-        view2_OT12 \<leftarrow> S2_OT12_1 (C xd) (P rb);
+        view2_OT12 \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rb);
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rb + rd') mod q; 
         let yb = ((rb + wb) + rd') mod q;
         view1_MPC2 :: 'd \<leftarrow> S1_MPC2 (D_mpc2 (xd,yd)) True;
@@ -869,7 +846,7 @@ definition S_D_bid :: "nat \<Rightarrow> (nat \<times> bool) \<Rightarrow> (nat 
         let w = (xb \<oplus> xd);
         return_spmf (d, view_MPC2, xd, view2_OT12, rb, rd', view1_OT12, view1_MPC2, True, wb, w)}"
 
-sublocale bid_prot_D: semi_honest_det_security 2 funct_bid R_D_bid S_D_bid valid_inputs_f_bid  .
+sublocale bid_prot_D: semi_honest_det_security _ funct_bid valid_inputs_f_bid 2 R_D_bid S_D_bid .
 
 lemma correct2:
   assumes "x < q" 
@@ -967,13 +944,13 @@ proof-
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
-    view2_OT12 :: 'g \<leftarrow> R2_OT12_1 [M input1, C xd];
-    outputs \<leftarrow> f_ot12 [M input1, C xd];
+    view2_OT12 :: 'g \<leftarrow> R2_OT12_1 [M2 input1, C1 xd];
+    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1); 
     let yd = (rd + rd') mod q; 
     let yb = (rb + rb') mod q;
@@ -1010,15 +987,15 @@ proof-
     view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
-    outputs_ot12 \<leftarrow> f_ot12 [M input1, C xd];
+    outputs_ot12 \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd'' = output_ot_rev (nth outputs_ot12 1);
-    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
-    outputs_ot12 \<leftarrow> f_ot12 [M input1, C xd];
+    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
+    outputs_ot12 \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs_ot12 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    view1_OT12  \<leftarrow> S1_OT12_1 (M input1') (U ());
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    view1_OT12  \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);
     let yd = (rd + rd') mod q; 
     let yb = (rb + rb') mod q;
@@ -1041,15 +1018,15 @@ proof-
     view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
-    outputs_ot12 \<leftarrow> f_ot12 [M input1, C xd];
+    outputs_ot12 \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd'' = output_ot_rev (nth outputs_ot12 1);
-    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
-    outputs_ot12 \<leftarrow> f_ot12 [M input1, C xd];
+    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
+    outputs_ot12 \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs_ot12 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    view1_OT12  \<leftarrow> S1_OT12_1 (M input1') (U ());
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    view1_OT12  \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);
     let yd = (rd + rd') mod q; 
     let yb = (rb + rb') mod q;
@@ -1073,15 +1050,15 @@ proof-
     view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
-    outputs_ot12 \<leftarrow> f_ot12 [M input1, C xd];
+    outputs_ot12 \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd'' = output_ot_rev (nth outputs_ot12 1);
-    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
-    outputs_ot12 \<leftarrow> f_ot12 [M input1, C xd];
+    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
+    outputs_ot12 \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs_ot12 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    view1_OT12  \<leftarrow> S1_OT12_1 (M input1') (U ());
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    view1_OT12  \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);
     let yd = (rd + rd') mod q; 
     let yb = (rb + rb') mod q;
@@ -1104,13 +1081,13 @@ proof-
         rb :: nat \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
         let rd'' = (rb + (q - b)) mod q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
-        outputs \<leftarrow> f_ot12 [M input1, C xd];
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
+        outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
         let rd = output_ot_rev (nth outputs 1);
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
-        outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
+        outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
         let rb' = output_ot_rev (nth outputs' 1);
         let yd = (rd + rd') mod q; 
         let yb = (rb + rb') mod q;
@@ -1140,12 +1117,12 @@ proof-
         rb :: nat \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
         let rd'' = (rb + (q - b)) mod q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         let rd = (rb + (q - b)) mod q;
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
-        outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
+        outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
         let rb' = output_ot_rev (nth outputs' 1);
         let yd = (rd + rd') mod q; 
         let yb = (rb + rb') mod q;
@@ -1168,10 +1145,10 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let rd'' = (rb + (q - b)) mod q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rd'' + rd') mod q; 
         let yb = (rb + rd') mod q;
          outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -1191,10 +1168,10 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let rd'' = (rb + (q - b)) mod q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rd'' + rd') mod q; 
         let yb = (rb + rd') mod q;
         outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -1216,10 +1193,10 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let rd'' = (rb + (q - b)) mod q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rd'' + rd') mod q; 
         let yb = (rb + rd') mod q;
         view1_MPC2 :: 'd \<leftarrow> S1_MPC2 (D_mpc2 (xd,yd)) True;
@@ -1237,10 +1214,10 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let rd'' = (rb + (q - b)) mod q; 
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rd'' + rd') mod q; 
         let yb = ((rd'' + b) mod q + rd') mod q;
         view1_MPC2 :: 'd \<leftarrow> S1_MPC2 (D_mpc2 (xd,yd)) True;
@@ -1256,10 +1233,10 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let rd'' = ((q - b) + rb) mod q; 
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rd'' + rd') mod q; 
         let yb = ((rd'' + b) mod q + rd') mod q;
         view1_MPC2 :: 'd \<leftarrow> S1_MPC2 (D_mpc2 (xd,yd)) True;
@@ -1277,10 +1254,10 @@ proof-
         let xb = (snd (nth outputs 2)) \<oplus> xd;
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rd'' \<leftarrow> map_spmf (\<lambda> rb.((q - b) + rb) mod q) (sample_uniform q); 
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rd'' + rd') mod q; 
         let yb = ((rd'' + b) mod q + rd') mod q;
         view1_MPC2 :: 'd \<leftarrow> S1_MPC2 (D_mpc2 (xd,yd)) True;
@@ -1294,10 +1271,10 @@ proof-
         let xb = (snd (nth outputs 2)) \<oplus> xd;
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rd'' \<leftarrow> sample_uniform q; 
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rd'' + rd') mod q; 
         let yb = ((rd'' + b) mod q + rd') mod q;
         view1_MPC2 :: 'd \<leftarrow> S1_MPC2 (D_mpc2 (xd,yd)) True;
@@ -1311,10 +1288,10 @@ proof-
         let xb = (snd (nth outputs 2)) \<oplus> xd;
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rd'' \<leftarrow> sample_uniform q; 
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rd'' + rd') mod q; 
         let yb = ((rd'' + (fst (nth outputs 2))) mod q + rd') mod q;
         view1_MPC2 :: 'd \<leftarrow> S1_MPC2 (D_mpc2 (xd,yd)) True;
@@ -1331,10 +1308,10 @@ proof-
         let xb = (snd (nth outputs 2)) \<oplus> xd;
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rd'' \<leftarrow> sample_uniform q; 
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rd'' + rd') mod q; 
         let yb = ((rd'' + (fst (nth outputs 2))) mod q + rd') mod q;
         view1_MPC2 :: 'd \<leftarrow> S1_MPC2 (D_mpc2 (xd,yd)) True;
@@ -1352,13 +1329,13 @@ proof-
           by (simp add: mod_add_left_eq)
     next
       case False
-      have *: "x ! 0 = True \<longrightarrow> x ! 1 = True \<longrightarrow> f_ot12 [M (if x ! 0 = False then (xb, (xb + (q - b)) mod q) else ((xb + (q - b)) mod q, xb)), C (x ! 1)] = return_spmf [U(), P (xb)]" for xb x
+      have *: "x ! 0 = True \<longrightarrow> x ! 1 = True \<longrightarrow> f_ot12 [M2 (if x ! 0 = False then (xb, (xb + (q - b)) mod q) else ((xb + (q - b)) mod q, xb)), C1 (x ! 1)] = return_spmf [U_ot12 (), P_ot12 (xb)]" for xb x
         by simp
-      have **:"x ! 0 = True \<longrightarrow> x ! 1 = False \<longrightarrow> f_ot12 [M (if x ! 0 = False then (xb, (xb + (q - b)) mod q) else ((xb + (q - b)) mod q, xb)), C (x ! 1)] = return_spmf [U(), P ((xb + (q - b)) mod q)]" for xb x
+      have **:"x ! 0 = True \<longrightarrow> x ! 1 = False \<longrightarrow> f_ot12 [M2 (if x ! 0 = False then (xb, (xb + (q - b)) mod q) else ((xb + (q - b)) mod q, xb)), C1 (x ! 1)] = return_spmf [U_ot12 (), P_ot12 ((xb + (q - b)) mod q)]" for xb x
         by simp
-      have ***:"x ! 0 = False \<longrightarrow> x ! 1 = True \<longrightarrow> f_ot12 [M (if x ! 0 = False then (xb, (xb + (q - b)) mod q) else ((xb + (q - b)) mod q, xb)), C (x ! 1)] = return_spmf [U(), P ((xb + (q - b)) mod q)]" for xb x
+      have ***:"x ! 0 = False \<longrightarrow> x ! 1 = True \<longrightarrow> f_ot12 [M2 (if x ! 0 = False then (xb, (xb + (q - b)) mod q) else ((xb + (q - b)) mod q, xb)), C1 (x ! 1)] = return_spmf [U_ot12 (), P_ot12 ((xb + (q - b)) mod q)]" for xb x
         by simp
-      have ****:"x ! 0 = False \<longrightarrow> x ! 1 = False \<longrightarrow> f_ot12 [M (if x ! 0 = False then (xb, (xb + (q - b)) mod q) else ((xb + (q - b)) mod q, xb)), C (x ! 1)] = return_spmf [U(), P (xb)]" for xb x
+      have ****:"x ! 0 = False \<longrightarrow> x ! 1 = False \<longrightarrow> f_ot12 [M2 (if x ! 0 = False then (xb, (xb + (q - b)) mod q) else ((xb + (q - b)) mod q, xb)), C1 (x ! 1)] = return_spmf [U_ot12 (), P_ot12 (xb)]" for xb x
         by simp
       have "R_D_bid [s, b, d] = do {
         outputs_mpc1 \<leftarrow> f_MPC1 [b, d];
@@ -1368,13 +1345,13 @@ proof-
         rb :: nat \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
         let rd'' = (rb + (q - b)) mod q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
-        outputs \<leftarrow> f_ot12 [M input1, C xd]; 
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
+        outputs \<leftarrow> f_ot12 [M2 input1, C1 xd]; 
         let rd = output_ot_rev (nth outputs 1);
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
-        outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
+        outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
         let rb' = output_ot_rev (nth outputs' 1);
         let yd = (rd + rd') mod q; 
         let yb = (rb + rb') mod q;
@@ -1406,12 +1383,12 @@ proof-
         rb :: nat \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
         let rd'' = (rb + (q - b)) mod q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         let rd = (rb + (q - b)) mod q;
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
-        outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
+        outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
         let rb' = output_ot_rev (nth outputs' 1);
         let yd = (rd + rd') mod q; 
         let yb = (rb + rb') mod q;
@@ -1435,10 +1412,10 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let rd'' = (rb + (q - b)) mod q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rd'' + rd') mod q; 
         let yb = (rb + rd') mod q;
         outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -1463,10 +1440,10 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let rd'' = (rb + (q - b)) mod q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd'');
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12 \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12 \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rd'' + rd') mod q; 
         let yb = (rb + rd') mod q;
         outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -1499,13 +1476,13 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
-        outputs_ot12 \<leftarrow> f_ot12 [M input1, C xd];
+        outputs_ot12 \<leftarrow> f_ot12 [M2 input1, C1 xd];
         let rd = output_ot_rev (nth outputs_ot12 1);
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rd);
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rd);
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12  \<leftarrow> S1_OT12_1 (M input1') (U ());
-        outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+        view1_OT12  \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
+        outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
         let rb' = output_ot_rev (nth outputs' 1);
         let yd = (rd + rd') mod q; 
         let yb = (rb + rb') mod q;
@@ -1527,10 +1504,10 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rb);
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rb);
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12  \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12  \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let rb' = (d + rd') mod q;
         let yd = (rb + rd') mod q; 
         let yb = (rb + rb') mod q;
@@ -1552,10 +1529,10 @@ proof-
         let xd = (nth outputs_mpc1 1);
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q; 
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rb);
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rb);
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12  \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12  \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rb + rd') mod q; 
         let yb = (rb + (d + rd')) mod q;
         view1_MPC2 :: 'd \<leftarrow> S1_MPC2 (D_mpc2 (xd,yd)) True;
@@ -1574,10 +1551,10 @@ proof-
         let xb = (snd (nth outputs 2)) \<oplus> xd;
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q; 
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rb);
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rb);
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12  \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12  \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rb + rd') mod q; 
         let yb = (rb + (fst (nth outputs 2) + rd')) mod q;
         view1_MPC2 :: 'd \<leftarrow> S1_MPC2 (D_mpc2 (xd,yd)) True;
@@ -1600,10 +1577,10 @@ proof-
         let xb = (snd (nth outputs 2)) \<oplus> xd;
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q; 
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rb);
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rb);
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12  \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12  \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let yd = (rb + rd') mod q; 
         let yb = (rb + (fst (nth outputs 2) + rd')) mod q;
         view1_MPC2 :: 'd \<leftarrow> S1_MPC2 (D_mpc2 (xd,yd)) True;
@@ -1628,13 +1605,13 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rb);
-        outputs_ot12 \<leftarrow> f_ot12 [M input1, C xd];
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rb);
+        outputs_ot12 \<leftarrow> f_ot12 [M2 input1, C1 xd];
         let rd = output_ot_rev (nth outputs_ot12 1);
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12  \<leftarrow> S1_OT12_1 (M input1') (U ());
-        outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+        view1_OT12  \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
+        outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
         let rb' = output_ot_rev (nth outputs' 1);
         let yd = (rd + rd') mod q; 
         let yb = (rb + rb') mod q;
@@ -1657,10 +1634,10 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rb);
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rb);
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12  \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12  \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let rb' = (d + rd') mod q;
         let yd = (rb + rd') mod q; 
         let yb = (rb + rb') mod q;
@@ -1684,10 +1661,10 @@ proof-
         view_MPC2 :: 'c \<leftarrow> S2_MPC1 d xd;
         rb :: nat \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));  
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xd) (P rb);
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xd) (P_ot12 rb);
         rd' :: nat \<leftarrow> sample_uniform q;
         let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-        view1_OT12  \<leftarrow> S1_OT12_1 (M input1') (U ());
+        view1_OT12  \<leftarrow> S1_OT12_1 (M2 input1') (U_ot12 ());
         let rb' = (d + rd') mod q;
         let yd = (rb + rd') mod q; 
         let yb = (rb + rb') mod q;
@@ -1768,13 +1745,13 @@ definition S_B_bid :: "nat \<Rightarrow> (nat \<times> bool) \<Rightarrow> (nat 
     view_MPC1 \<leftarrow> S1_MPC1 b xb;
     rb \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+    view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
     rd' \<leftarrow> sample_uniform q;
-    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd');
+    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd');
     let yd = ((rb + (q - wb)) + rd') mod q;
     return_spmf (b, view_MPC1, xb, rb, view1_OT12, view2_OT12, rd', xd, yd)}"
 
-sublocale bid_prot_B: semi_honest_det_security 1 funct_bid R_B_bid S_B_bid valid_inputs_f_bid .
+sublocale bid_prot_B: semi_honest_det_security _ funct_bid valid_inputs_f_bid 1 R_B_bid S_B_bid .
 
 lemma funct_bid_output_fst_b [simp]: 
   assumes "x \<in> set_spmf (return_spmf [(b, True), (b, True), (b, True)])"
@@ -1791,14 +1768,14 @@ proof-
     view_MPC1 \<leftarrow> S1_MPC1 b xb;
     rb \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
-    outputs \<leftarrow> f_ot12 [M input1, C xd];
+    view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
+    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);
-    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rb');
+    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rb');
     let yd = (rd + rd') mod q;   
     let yb = (rb + rb') mod q;
     outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -1822,11 +1799,11 @@ proof-
     view_MPC1 \<leftarrow> S1_MPC1 b xb;
     rb \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+    view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
     let rd = (rb + (q - b)) mod q;
     rd' \<leftarrow> sample_uniform q;
     let rb' = rd';
-    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rb');
+    view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rb');
     let yd = (rd + rd') mod q;
     let yb = (rb + rb') mod q;
     outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -1845,10 +1822,10 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
         let rd = (rb + (q - b)) mod q;
         rd' \<leftarrow> sample_uniform q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd');
         let yd = (rd + rd') mod q;
         let yb = (rb + rd') mod q;
         outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -1863,10 +1840,10 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
         rd' \<leftarrow> sample_uniform q;
         let rd'' = rd';
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd');
         let yd = ((rb + (q - (fst (nth outputs 1)))) mod q + rd') mod q;
         let yb = (rb + rd'') mod q;
         outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -1889,10 +1866,10 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
         rd' \<leftarrow> sample_uniform q;
         let rd'' = rd';
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd');
         let yd = ((rb + (q - (fst (nth outputs 1)))) mod q + rd') mod q;
         let yb = (rb + rd'') mod q;
         outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -1907,10 +1884,10 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
         rd' \<leftarrow> sample_uniform q;
         let rd'' = rd';
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd');
         let yd = ((rb + (q - (fst (nth outputs 1)))) + rd') mod q;
         let yb = (rb + rd'') mod q;
         _ :: unit \<leftarrow> assert_spmf True;
@@ -1929,11 +1906,11 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
         let rd = (rb + (q - b)) mod q;
         rd' \<leftarrow> sample_uniform q;
         let rd'' = rd';
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd');
         let yd = (rd + rd') mod q;
         let yb = (rb + rd'') mod q;
         outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -1951,11 +1928,11 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
         let rd = (rb + (q - b)) mod q;
         rd' \<leftarrow> sample_uniform q;
         let rd'' = rd';
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd');
         let yd = (rd + rd') mod q;
         let yb = (rb + rd'') mod q;
         _ :: unit \<leftarrow> assert_spmf False;
@@ -1984,12 +1961,12 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
-        outputs \<leftarrow> f_ot12 [M input1, C xd];
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
+        outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
         let rd = output_ot_rev (nth outputs 1);
         rd' \<leftarrow> sample_uniform q;
         let rd'' = (d + rd') mod q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
         let yd = (rd + rd') mod q;   
         let yb = (rb + rd'') mod q;
         outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -2007,12 +1984,12 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
-        outputs \<leftarrow> f_ot12 [M input1, C xd];
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
+        outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
         let rd = output_ot_rev (nth outputs 1);
         rd' \<leftarrow> sample_uniform q;
         let rd'' = (d + rd') mod q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
         let yd = (rd + (rd'' + (q - d)) mod q) mod q;  
         let yb = (rb + rd'') mod q;
         outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -2030,11 +2007,11 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
-        outputs \<leftarrow> f_ot12 [M input1, C xd];
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
+        outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
         let rd = output_ot_rev (nth outputs 1);
         rd'' \<leftarrow> map_spmf (\<lambda> rd'. (d + rd') mod q) (sample_uniform q);
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
         let yd = (rd + (rd'' + (q - d)) mod q) mod q;   
         let yb = (rb + rd'') mod q;
         outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -2048,11 +2025,11 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
-        outputs \<leftarrow> f_ot12 [M input1, C xd];
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
+        outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
         let rd = output_ot_rev (nth outputs 1);
         rd'' \<leftarrow> sample_uniform q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
         let yd = (rd + (rd'' + (q - d)) mod q) mod q;   
         let yb = (rb + rd'') mod q;
         outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -2066,10 +2043,10 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
         let rd = rb;
         rd'' \<leftarrow> sample_uniform q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
         let yd = (rd + (rd'' + (q - d)) mod q) mod q;   
         let yb = (rb + rd'') mod q;
         outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -2087,9 +2064,9 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
         rd'' \<leftarrow> sample_uniform q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
         let yd = ((rb + (q - (fst (nth outputs 1))) + rd'')) mod q;   
         let yb = (rb + rd'') mod q;
         outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -2110,9 +2087,9 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
         rd'' \<leftarrow> sample_uniform q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
         let yd = ((rb + (q - (fst (nth outputs 1))) + rd'')) mod q;  
         let yb = (rb + rd'') mod q;
         outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -2133,9 +2110,9 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
         rd'' \<leftarrow> sample_uniform q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
         let yd = ((rb + (q - (fst (nth outputs 1))) + rd'')) mod q;  
         let yb = (rb + rd'') mod q;
         outputs_mpc2 :: bool list \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -2152,9 +2129,9 @@ proof-
         view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
+        view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
         rd'' \<leftarrow> sample_uniform q;
-        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+        view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
         let yd = ((rb + (q - (fst (nth outputs 1))) + rd'')) mod q;  
         return_spmf (b, view_MPC1, xb, rb, view1_OT12, view2_OT12, rd'', xd, yd)}"
        by(simp add: bind_spmf_const q_gt_0 Let_def)
@@ -2169,12 +2146,12 @@ proof-
        view_MPC1 \<leftarrow> S1_MPC1 b xb;
        rb \<leftarrow> sample_uniform q;
        let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-       view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
-       outputs \<leftarrow> f_ot12 [M input1, C xd];
+       view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
+       outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
        let rd = output_ot_rev (nth outputs 1);
        rd' \<leftarrow> sample_uniform q;
        let rd'' = (d + rd') mod q;
-       view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+       view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
        let yd = (rd + rd') mod q;   
        let yb = (rb + rd'') mod q;
        outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -2193,12 +2170,12 @@ proof-
        view_MPC1 \<leftarrow> S1_MPC1 b xb;
        rb \<leftarrow> sample_uniform q;
        let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-       view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
-       outputs \<leftarrow> f_ot12 [M input1, C xd];
+       view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
+       outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
        let rd = output_ot_rev (nth outputs 1);
        rd' \<leftarrow> sample_uniform q;
        let rd'' = (d + rd') mod q;
-       view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+       view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
        let yd = (rd + rd') mod q;   
        let yb = (rb + rd'') mod q;
        outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
@@ -2213,12 +2190,12 @@ proof-
        view_MPC1 \<leftarrow> S1_MPC1 b xb;
         rb \<leftarrow> sample_uniform q;
         let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-       view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M input1) (U ());
-       outputs \<leftarrow> f_ot12 [M input1, C xd];
+       view1_OT12 :: 'f \<leftarrow> S1_OT12_1 (M2 input1) (U_ot12 ());
+       outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
        let rd = output_ot_rev (nth outputs 1);
         rd' \<leftarrow> sample_uniform q;
         let rd'' = (d + rd') mod q;
-       view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C xb) (P rd'');
+       view2_OT12 :: 'g \<leftarrow> S2_OT12_1 (C1 xb) (P_ot12 rd'');
         let yd = (rd + rd') mod q;   
         let yb = (rb + rd'') mod q;
        _ :: unit \<leftarrow> assert_spmf False;
@@ -2243,11 +2220,6 @@ proof-
   qed
 qed
 
-theorem perfect_security_B:
-  assumes "s < q" "b < q" "d < q"
-  shows "bid_prot_B.perfect_security [s,b,d]"
-  using B_corrupt assms unfolding bid_prot_B.perfect_security_def 
-  by(auto simp add: split_def)
 
 lemma rd'_rewrite:
   assumes "yd = (rd + rd') mod q" and "rd < q" and "rd' < q"
@@ -2413,11 +2385,11 @@ proof-
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M input1, C xd];
+    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);    
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
@@ -2438,11 +2410,11 @@ proof-
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M input1, C xd];
+    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);   
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
@@ -2465,17 +2437,6 @@ proof-
   ultimately show ?thesis by argo
 qed
 
-fun funct_bid :: "nat list \<Rightarrow> ((nat \<times> bool) list) spmf"
-  where "funct_bid [s, b, d] = do {
-        _ :: unit \<leftarrow> assert_spmf (Max {b,d} \<ge> s);
-        let out = (Max {b,d}, (b \<ge> d));
-        return_spmf ([out, out, out])}"
-
-lemma 6666:
-  assumes "d < q" and "rb < q" and "rd' < q"
-  shows "((rb + (d + rd') mod q) mod q + q - (rb + rd') mod q) mod q = d"
-  sorry
-
 lemma correctness_reserve_met:
   assumes "Max {b,d} < q"
     and "Max {b,d} \<ge> s"
@@ -2488,11 +2449,11 @@ proof-
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M input1, C xd];
+    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1); 
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
@@ -2516,11 +2477,11 @@ proof-
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M input1, C xd];
+    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1); 
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
@@ -2541,11 +2502,11 @@ proof-
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M input1, C xd];
+    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1); 
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
@@ -2561,11 +2522,11 @@ proof-
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M input1, C xd];
+    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
@@ -2583,13 +2544,13 @@ proof-
     let out = (b, True);
     return_spmf ([out, out, out])}"
     proof-
-      have "f_ot12 [M (if y then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb)), C y] = return_spmf [U (), P ((rb + (q - b)) mod q)]" for y rb
+      have "f_ot12 [M2 (if y then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb)), C1 y] = return_spmf [U_ot12 (), P_ot12 ((rb + (q - b)) mod q)]" for y rb
         by simp
-      moreover have "f_ot12 [M (if \<not> y then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb)), C y] = return_spmf [U (), P rb]" for y rb
+      moreover have "f_ot12 [M2 (if \<not> y then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb)), C1 y] = return_spmf [U_ot12 (), P_ot12 rb]" for y rb
         by simp
-      moreover have "f_ot12 [M (if y then ((d + rd') mod q, rd') else (rd', (d + rd') mod q)), C (\<not> y)] = return_spmf [U (), P ((d + rd') mod q)]" for y rd'
+      moreover have "f_ot12 [M2 (if y then ((d + rd') mod q, rd') else (rd', (d + rd') mod q)), C1 (\<not> y)] = return_spmf [U_ot12 (), P_ot12 ((d + rd') mod q)]" for y rd'
         by simp
-      moreover have "f_ot12 [M (if \<not> y then ((d + rd') mod q, rd') else (rd', (d + rd') mod q)), C (\<not> y)] = return_spmf [U (), P rd']" for y rd'
+      moreover have "f_ot12 [M2 (if \<not> y then ((d + rd') mod q, rd') else (rd', (d + rd') mod q)), C1 (\<not> y)] = return_spmf [U_ot12 (), P_ot12 rd']" for y rd'
         by simp
       ultimately show ?thesis 
       apply(auto simp add: bind_spmf_const Let_def q_gt_0)
@@ -2613,11 +2574,11 @@ proof-
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M input1, C xd];
+    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M input1', C xb]; 
+    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
@@ -2636,13 +2597,13 @@ proof-
     let out = (d, False);
     return_spmf ([out, out, out])}" 
     proof-
-      have "f_ot12 [M (if y then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb)), C y] = return_spmf [U (), P ((rb + (q - b)) mod q)]" for y rb
+      have "f_ot12 [M2 (if y then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb)), C1 y] = return_spmf [U_ot12 (), P_ot12 ((rb + (q - b)) mod q)]" for y rb
         by simp
-      moreover have "f_ot12 [M (if \<not> y then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb)), C y] = return_spmf [U (), P rb]" for y rb
+      moreover have "f_ot12 [M2 (if \<not> y then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb)), C1 y] = return_spmf [U_ot12 (), P_ot12 rb]" for y rb
         by simp
-      moreover have "f_ot12 [M (if y then ((d + rd') mod q, rd') else (rd', (d + rd') mod q)), C (\<not> y)] = return_spmf [U (), P ((d + rd') mod q)]" for y rd'
+      moreover have "f_ot12 [M2 (if y then ((d + rd') mod q, rd') else (rd', (d + rd') mod q)), C1 (\<not> y)] = return_spmf [U_ot12 (), P_ot12 ((d + rd') mod q)]" for y rd'
         by simp
-      moreover have "f_ot12 [M (if \<not> y then ((d + rd') mod q, rd') else (rd', (d + rd') mod q)), C (\<not> y)] = return_spmf [U (), P rd']" for y rd'
+      moreover have "f_ot12 [M2 (if \<not> y then ((d + rd') mod q, rd') else (rd', (d + rd') mod q)), C1 (\<not> y)] = return_spmf [U_ot12 (), P_ot12 rd']" for y rd'
         by simp
       ultimately show ?thesis 
       apply(auto simp add: bind_spmf_const Let_def q_gt_0)
@@ -2666,8 +2627,30 @@ qed
 theorem correctness:
   shows "bid_prot_correct.correctness [s, b, d]" 
   unfolding bid_prot_correct.correctness_def 
-  apply(cases "Max {b,d} \<ge> s") 
-  by(cases "s \<le> Max {b, d}"; auto simp add: correctness_reserve_met correctness_reserve_not_met not_le)
+  apply(cases "Max {b,d} < s") 
+  using correctness_reserve_not_met valid_inputs_f_bid.simps 
+   apply (metis (no_types, hide_lams) basic_trans_rules(19))
+  using correctness_reserve_met valid_inputs_f_bid.simps  
+  by (metis Max.singleton Max_insert finite.intros(1) finite_insert max_less_iff_conj not_le_imp_less)
+
+theorem perfect_security_B:
+  shows "bid_prot_B.perfect_security [s,b,d]"
+  using B_corrupt  unfolding bid_prot_B.perfect_security_def 
+  by(auto simp add: split_def)
+
+theorem perfect_security_S:
+  shows "bid_prot_S.perfect_security [s,b,d]"
+  using S_corrupt unfolding bid_prot_S.perfect_security_def
+  by(auto simp add: split_def)
+
+theorem perfect_security_D:
+  shows "bid_prot_D.perfect_security [s,b,d]"
+proof-
+  have "[s, b, d] ! 2 = d" by simp
+  thus ?thesis
+    using D_corrupt valid_inputs_f_bid.simps unfolding bid_prot_D.perfect_security_def   
+    by presburger
+qed
 
 end 
 

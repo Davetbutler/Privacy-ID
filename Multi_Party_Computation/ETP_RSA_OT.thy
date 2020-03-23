@@ -8,6 +8,7 @@ RSA mapping is a bijection.\<close>
 theory ETP_RSA_OT imports
   ETP_OT
   Number_Theory_Aux
+  OT_Functionalities
   Uniform_Sampling
 begin
 
@@ -657,16 +658,16 @@ sublocale etp_ot12: ETP_ot12_base I domain range B F F\<^sub>i\<^sub>n\<^sub>v
 
 text\<open>After proving the RSA collection is an ETP the proofs of security come easily from the general proofs.\<close>
 
-lemma correctness_rsa: "etp_ot12.ot12_correct.correctness [M (b0, b1), C \<sigma>]"
+lemma correctness_rsa: "etp_ot12.ot12_correct.correctness [M2 (b0, b1), C1 \<sigma>]"
   by (rule etp_ot12.correct)
 
-lemma perfect_security_P1: "etp_ot12.ot12_party1.perfect_security [M (b0, b1),  C \<sigma>]"
+lemma perfect_security_P1: "etp_ot12.ot12_party1.perfect_security [M2 (b0, b1),  C1 \<sigma>]"
   by (rule etp_ot12.perfect_security_P1)
 
 lemma security_P2:
-  assumes "etp_rsa.HCP_adv etp_ot12.\<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2 \<le> HCP_ad"
+  assumes "etp_rsa.HCP_adv etp_ot12.\<A> (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0)) D2 \<le> HCP_ad"
     and lossless_D2: "\<forall>view. lossless_spmf (D2 view)"
-  shows "etp_ot12.ot12_party2.advantage [M (b0, b1), C \<sigma>] D2 \<le> 2 * HCP_ad"
+  shows "etp_ot12.ot12_party2.advantage [M2 (b0, b1), C1 \<sigma>] D2 \<le> 2 * HCP_ad"
   using assms etp_ot12.P2_security by simp
 
 end 
@@ -681,29 +682,29 @@ sublocale rsa_base "(prime_set n)" B
   using local.rsa_proof_assm  by simp
 
 lemma 
-  shows "etp_ot12.ot12_correct.correctness n [M (b0, b1),  C \<sigma>]"
+  shows "etp_ot12.ot12_correct.correctness n [M2 (b0, b1), C1 \<sigma>]"
   by(rule correctness_rsa)
 
-lemma perfect_security_P1: "etp_ot12.ot12_party1.perfect_security n [M (b0, b1),  C \<sigma>]"
+lemma perfect_security_P1: "etp_ot12.ot12_party1.perfect_security n [M2 (b0, b1), C1 \<sigma>]"
   by (rule etp_ot12.perfect_security_P1)
 
 lemma security_P2:
-  assumes "etp_rsa.HCP_adv n etp_ot12.\<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2 \<le> HCP_ad"
+  assumes "etp_rsa.HCP_adv n etp_ot12.\<A> (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0)) D2 \<le> HCP_ad"
     and lossless_D2: "\<forall>view. lossless_spmf (D2 view)"
-  shows "etp_ot12.ot12_party2.advantage n [M (b0, b1),  C \<sigma>] D2 \<le> 2 * HCP_ad"
+  shows "etp_ot12.ot12_party2.advantage n [M2 (b0, b1), C1 \<sigma>] D2 \<le> 2 * HCP_ad"
   using assms etp_ot12.P2_security by simp
 
 lemma P2_sec_asym: 
   assumes HCP_adv_neg: "negligible (\<lambda> n. etp_advantage n)"
-    and etp_adv_bound: "\<forall> n. etp_rsa.HCP_adv n etp_ot12.\<A> (C \<sigma>) (if \<sigma> then (P b1) else (P b0)) D2 \<le> etp_advantage n"
+    and etp_adv_bound: "\<forall> n. etp_rsa.HCP_adv n etp_ot12.\<A> (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0)) D2 \<le> etp_advantage n"
     and lossless_D2: "\<forall>view. lossless_spmf (D2 view)"
-  shows "negligible (\<lambda> n. etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2)" 
+  shows "negligible (\<lambda> n. etp_ot12.ot12_party2.advantage n [M2 (b0, b1), C1 \<sigma>] D2)" 
 proof-
   have "negligible (\<lambda> n. 2 * etp_advantage n)" using HCP_adv_neg 
     by (simp add: negligible_cmultI)
-  moreover have "\<bar>etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2\<bar> = etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2" 
+  moreover have "\<bar>etp_ot12.ot12_party2.advantage n [M2 (b0, b1), C1 \<sigma>] D2\<bar> = etp_ot12.ot12_party2.advantage n [M2 (b0, b1), C1 \<sigma>] D2" 
     for n unfolding etp_ot12.ot12_party2.advantage_def  by linarith
-  moreover have "etp_ot12.ot12_party2.advantage n [M (b0, b1), C \<sigma>] D2 \<le> 2 * etp_advantage n" for n
+  moreover have "etp_ot12.ot12_party2.advantage n [M2 (b0, b1), C1 \<sigma>] D2 \<le> 2 * etp_advantage n" for n
     using security_P2 assms by blast
   ultimately show ?thesis 
     using assms negligible_le by presburger 
