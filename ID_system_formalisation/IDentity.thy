@@ -3,6 +3,8 @@ theory IDentity imports
   Game_Based_Crypto.Game_Based_Crypto
 begin
 
+sledgehammer_params[timeout = 1000]
+
 type_synonym ('share1', 'share2', 'share3') share_user_record = "'share1' \<times> 'share2' \<times> 'share3'"
 
 type_synonym 'attrs' query = "'attrs' \<Rightarrow> bool"
@@ -48,8 +50,9 @@ lemma all_attrs_valid: "\<forall> attrs. attrs \<in> attrs_set \<longrightarrow>
 
 text\<open>We define the registration phase using the fixes parameters for the user and government.\<close>
 
-definition reg :: "'attrs \<Rightarrow> ('token \<times> ('share1, 'share2, 'share3) share_user_record) spmf" 
-  where "reg attrs = do {
+definition reg :: "'user \<Rightarrow> ('token \<times> ('share1, 'share2, 'share3) share_user_record) spmf" 
+  where "reg user = do {
+   let attrs = users_to_attributes user;
    enc_attrs \<leftarrow> reg_user attrs;
    (S, \<sigma>) \<leftarrow> reg_govt_shares enc_attrs;
    token \<leftarrow> reg_govt_token \<sigma> S;
@@ -57,26 +60,30 @@ definition reg :: "'attrs \<Rightarrow> ('token \<times> ('share1, 'share2, 'sha
 
 subsection\<open>Functional Properties\<close>
 
-text\<open>There must be a one to one mapping of users to attributes.\<close>
-
-definition "bij_users_attrs \<longleftrightarrow> bij_betw users_to_attributes user_set attrs_set"
+lemma obtain_user_from_attrs:
+  fixes attrs
+  assumes "attrs \<in> attrs_set"
+  obtains user where "user \<in> user_set" and "users_to_attributes user = attrs"
+  using bij_betw_users_attrs[unfolded bij_betw_def] assms
+  by auto 
 
 lemma obtain_attrs_from_user:
-  fixes user 
+  fixes user
   assumes "user \<in> user_set"
-  obtains attrs where "attrs \<in> attrs_set"
-  using bij_betw_users_attrs attrs_set_not_empty by blast
+  obtains attrs where "attrs \<in> attrs_set" "users_to_attributes user = attrs"
+  using bij_betw_users_attrs[unfolded bij_betw_def] assms
+  by auto 
 
 text\<open>We require that that no two users, with different attributes, will yield the same tokens upon registration. This must be a property of the registration phase the attributes.\<close>
 
-definition "unique_users = (\<forall> attrs1 attrs2. attrs1 \<in> attrs_set \<longrightarrow> attrs2 \<in> attrs_set \<longrightarrow> attrs1 \<noteq> attrs2 \<longrightarrow> reg attrs1 \<noteq> reg attrs2)"
+definition "unique_users = (\<forall> user1 user2. user1 \<in> user_set \<longrightarrow> user2 \<in> user_set \<longrightarrow> user1 \<noteq> user2 \<longrightarrow> reg user1 \<noteq> reg user2)"
 
 text \<open>The correctness property ensures if the IDentity system is carried out honestly the correct query result is returned.\<close>
 
 definition correct_game :: "'user \<Rightarrow> 'attrs query \<Rightarrow> bool spmf"
   where "correct_game user query = do {
         let attrs = users_to_attributes user;
-        (token, enc_user_record) \<leftarrow> reg attrs;
+        (token, enc_user_record) \<leftarrow> reg user;
         auth_token \<leftarrow> auth token query;
         b \<leftarrow> ver auth_token;
         return_spmf (b = query attrs)}"  
