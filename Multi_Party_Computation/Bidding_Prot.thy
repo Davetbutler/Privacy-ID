@@ -140,7 +140,8 @@ locale bidding_prot = bidding_prot_base
     and "mpc1_view_1"
     and "S1_MPC1" 
     and "mpc1_view_2" 
-    and "S2_MPC1" "protocol_MPC2" 
+    and "S2_MPC1" 
+    and protocol_MPC2 
     and "R1_MPC2"
     and S1_MPC2  
     and R2_MPC2 
@@ -148,7 +149,9 @@ locale bidding_prot = bidding_prot_base
     and "R1_OT12_1" 
     and  R2_OT12_1
     and S1_OT12_1 S2_OT12_1  
-    and outputs_mpc1 randomness outputs_mpc2
+    and outputs_mpc1 
+    and randomness 
+    and outputs_mpc2
     +  
   assumes MPC1_correct: "protocol_MPC1 [b, d] = f_MPC1 [b, d]"
     and MPC2_correct: "mpc2.correctness [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)]"
@@ -459,8 +462,10 @@ proof-
     outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
     _ :: unit \<leftarrow> assert_spmf (nth outputs_mpc2 0);
     return_spmf (s, xb, yb, view, xd, yd)}"
-      using R_initial apply auto    
-       apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp?)+
+      using R_initial 
+[[simproc del: let_simp]] apply auto
+       apply(intro bind_spmf_cong bind_spmf_cong[OF refl])
+      apply simp apply simp apply simp
       using b_ge_d f_MPC1_contr_b_lt_d by blast +
     show ?thesis 
     proof(cases "b \<ge> s")

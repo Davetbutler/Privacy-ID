@@ -2,39 +2,6 @@ theory Semi_Honest imports
   CryptHOL.CryptHOL
 begin
 
-locale semi_honest_prob = 
-  fixes i :: nat
-    and funct :: "'input list \<Rightarrow> ('output list) spmf"
-    and protocol :: "'input list \<Rightarrow> ('output list) spmf"
-    and outputs :: "'input list \<Rightarrow> 'rand \<Rightarrow> ('output list) spmf"
-    and randmoness :: "'rand spmf"
-    and real_view_msgs :: "'input list \<Rightarrow> 'rand \<Rightarrow> 'view spmf" \<comment> \<open>the real view of the ith party\<close>
-    and sim :: "'input \<Rightarrow> 'output \<Rightarrow> 'view spmf"
-    and valid_inputs :: "'input list \<Rightarrow> bool"
-begin
-
-definition real_view :: "'input list \<Rightarrow> ('view \<times> 'output list) spmf"
-  where "real_view inputs = do {
-    rand \<leftarrow> randmoness;
-    view \<leftarrow> real_view_msgs inputs rand;
-    outputs :: 'output list \<leftarrow> outputs inputs rand;
-    return_spmf (view, outputs)}"
-
-definition ideal_view :: "'input list \<Rightarrow> ('view \<times> 'output list) spmf"
-  where "ideal_view inputs = do {
-   outputs :: 'output list \<leftarrow> funct inputs;
-   view :: 'view \<leftarrow> sim (nth inputs i) (nth outputs i);
-   return_spmf (view, outputs)}"
-
-definition "perfect_security inputs \<equiv> (valid_inputs inputs \<longrightarrow> real_view inputs = ideal_view inputs)"
-
-definition advantage :: "'input list \<Rightarrow> (('view \<times> 'output list) \<Rightarrow> bool spmf) \<Rightarrow> real"
-  where "advantage inputs D \<equiv> \<bar>spmf (real_view inputs \<bind> D) True - spmf (ideal_view inputs \<bind> D) True\<bar>"
-
-definition "correctness inputs \<equiv> (valid_inputs inputs \<longrightarrow> funct inputs = protocol inputs)"
-
-end 
-
 locale semi_honest_det_correctness = 
   fixes funct :: "'input list \<Rightarrow> 'output list spmf"
     and protocol :: "'input list \<Rightarrow> 'output list spmf"
@@ -68,6 +35,39 @@ lemma
   shows " advantage inputs = 0"
   unfolding advantage_def using assms
   by(auto simp add: perfect_security_def advantage_def assms)
+
+end 
+
+locale semi_honest_prob = 
+  fixes i :: nat
+    and funct :: "'input list \<Rightarrow> ('output list) spmf"
+    and protocol :: "'input list \<Rightarrow> ('output list) spmf"
+    and outputs :: "'input list \<Rightarrow> 'rand \<Rightarrow> ('output list) spmf"
+    and randmoness :: "'rand spmf"
+    and real_view_msgs :: "'input list \<Rightarrow> 'rand \<Rightarrow> 'view spmf" \<comment> \<open>the real view of the ith party\<close>
+    and sim :: "'input \<Rightarrow> 'output \<Rightarrow> 'view spmf"
+    and valid_inputs :: "'input list \<Rightarrow> bool"
+begin
+
+definition real_view :: "'input list \<Rightarrow> ('view \<times> 'output list) spmf"
+  where "real_view inputs = do {
+    rand \<leftarrow> randmoness;
+    view \<leftarrow> real_view_msgs inputs rand;
+    outputs :: 'output list \<leftarrow> outputs inputs rand;
+    return_spmf (view, outputs)}"
+
+definition ideal_view :: "'input list \<Rightarrow> ('view \<times> 'output list) spmf"
+  where "ideal_view inputs = do {
+   outputs :: 'output list \<leftarrow> funct inputs;
+   view :: 'view \<leftarrow> sim (nth inputs i) (nth outputs i);
+   return_spmf (view, outputs)}"
+
+definition "perfect_security inputs \<equiv> (valid_inputs inputs \<longrightarrow> real_view inputs = ideal_view inputs)"
+
+definition advantage :: "'input list \<Rightarrow> (('view \<times> 'output list) \<Rightarrow> bool spmf) \<Rightarrow> real"
+  where "advantage inputs D \<equiv> \<bar>spmf (real_view inputs \<bind> D) True - spmf (ideal_view inputs \<bind> D) True\<bar>"
+
+definition "correctness inputs \<equiv> (valid_inputs inputs \<longrightarrow> funct inputs = protocol inputs)"
 
 end 
 
