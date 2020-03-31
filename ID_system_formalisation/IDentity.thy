@@ -12,7 +12,10 @@ type_synonym ('attrs', 'sens_atrrs', 'result') query = "('attrs' set \<times> 's
 type_synonym ('attrs', 'sens_atrrs') user_attrs = "('attrs' set \<times> 'sens_atrrs' set)" 
 
 type_synonym ('user', 'state_attr_hid', 'enc_attrs') attr_hiding_adversary
-            = "(('user' \<times> 'user') \<times> 'state_attr_hid') spmf \<times> ('state_attr_hid' \<Rightarrow> 'enc_attrs' \<Rightarrow> bool spmf)"
+  = "(('user' \<times> 'user') \<times> 'state_attr_hid') spmf \<times> ('state_attr_hid' \<Rightarrow> 'enc_attrs' \<Rightarrow> bool spmf)"
+
+type_synonym ('user', 'state_attr_hid', 'share1', 'share2', 'share3') attr_hiding_adversary'
+  = "(('user' \<times> 'user') \<times> 'state_attr_hid') spmf \<times> ('state_attr_hid' \<Rightarrow> ('share1', 'share2', 'share3') share_user_record \<Rightarrow> bool spmf)"
 
 type_synonym ('token', 'state',  'auth_token') hiding_adversary = "(('token' \<times> 'token') \<times> 'state') spmf \<times> ('state' \<Rightarrow> 'auth_token' \<Rightarrow> bool spmf)"
 
@@ -22,12 +25,12 @@ locale identity_system =
   fixes reg_enc_sens_attrs :: "'sens_atrrs set \<Rightarrow> 'enc_attrs spmf" \<comment> \<open>The user encrypts their attributes before sending them to the government.\<close> 
     and reg_govt_shares :: "'attrs set \<Rightarrow> 'enc_attrs \<Rightarrow> (('share1, 'share2, 'share3) share_user_record \<times> 'state_govt) spmf"
     and reg_govt_token :: "'state_govt \<Rightarrow> ('share1, 'share2, 'share3) share_user_record \<Rightarrow> 'token spmf"
-\<comment> \<open>The government first produces the shares of the user record and then a token to be sent back to the user.\<close>
+    \<comment> \<open>The government first produces the shares of the user record and then a token to be sent back to the user.\<close>
     and auth :: "'token \<Rightarrow> ('attrs, 'sens_atrrs, 'result) query \<Rightarrow> 'auth_token spmf" 
-\<comment> \<open>Authentication is run between a user and a service provider. 
+    \<comment> \<open>Authentication is run between a user and a service provider. 
     The user inputs their token, the service provider their desired query and an authorised token is returned. This is sent to the government.\<close>
     and ver :: "'auth_token \<Rightarrow> 'result spmf"
-\<comment> \<open>The government uses the authorised token to determine the response to the query.\<close>
+    \<comment> \<open>The government uses the authorised token to determine the response to the query.\<close>
     and valid_user :: "'user \<Rightarrow> bool"
     and valid_attrs :: "('attrs set \<times> 'sens_atrrs set) \<Rightarrow> bool" 
     and valid_token :: "'token \<Rightarrow> bool"
@@ -40,9 +43,7 @@ locale identity_system =
     and user_set_not_empty: "user_set \<noteq> {}"
     and attrs_set_not_empty: "attrs_set \<noteq> {}"
     and bij_betw_users_attrs: "bij_betw users_attr_creation user_set attrs_set"
-    (*and service_providers :: "'providers set"
-    and fed_govt :: "'dept set" *)
-(*user sets can be parameters of the system, what assumptions need to be made on them?*)
+    and lossless_reg_govt_token: "lossless_spmf (reg_govt_token \<sigma> S)"
 begin
 
 lemma all_users_valid: "\<forall> user. user \<in> user_set \<longrightarrow> valid_user user"   
@@ -92,6 +93,9 @@ definition correct_game :: "'user \<Rightarrow> ('attrs, 'sens_atrrs, 'result) q
 
 definition "correct \<longleftrightarrow> (\<forall> user query. valid_user user \<longrightarrow> valid_query query \<longrightarrow> spmf (correct_game user query) True = 1)"
 
+(*the output given to the adversary should be from after the registration phase, in particular the 
+second output from the reg phase as this is what the government sees.*)
+
 primrec sens_attrs_hiding_game :: "('user, 'state_attr_hid, 'enc_attrs) attr_hiding_adversary \<Rightarrow> bool spmf"
   where 
     "sens_attrs_hiding_game (\<A>1, \<A>2) = TRY do {
@@ -101,11 +105,25 @@ primrec sens_attrs_hiding_game :: "('user, 'state_attr_hid, 'enc_attrs) attr_hid
       let (attrsb, sens_attrsb) = users_attr_creation (if b then user0 else user1);
       enc_attrs_b \<leftarrow> reg_enc_sens_attrs sens_attrsb;
       b' \<leftarrow> \<A>2 \<sigma> enc_attrs_b;
-      return_spmf (b' = b)} ELSE coin_spmf" 
+      return_spmf (b' = b)} ELSE coin_spmf"
+
+primrec sens_attrs_hiding_game' :: "('user, 'state_attr_hid, 'share1, 'share2, 'share3) attr_hiding_adversary' \<Rightarrow> bool spmf"
+  where 
+    "sens_attrs_hiding_game' (\<A>1, \<A>2) = TRY do {
+      ((user0, user1), \<sigma>) \<leftarrow> \<A>1;
+      _ :: unit \<leftarrow> assert_spmf (valid_user user0 \<and> valid_user user1);
+      b :: bool \<leftarrow> coin_spmf;
+      (token, S) \<leftarrow> reg (if b then user0 else user1);
+      b' \<leftarrow> \<A>2 \<sigma> S;
+      return_spmf (b' = b)} ELSE coin_spmf"
 
 definition "sens_attrs_hiding_advantage \<A> = \<bar>spmf (sens_attrs_hiding_game \<A>) True - 1/2\<bar>"
 
+definition "sens_attrs_hiding_advantage' \<A> = \<bar>spmf (sens_attrs_hiding_game' \<A>) True - 1/2\<bar>"
+
 definition "perfect_sens_attrs_hiding \<A> \<longleftrightarrow> sens_attrs_hiding_advantage \<A> = 0"
+
+definition "perfect_sens_attrs_hiding' \<A> \<longleftrightarrow> sens_attrs_hiding_advantage' \<A> = 0"
 
 definition "no_sens_attr \<longleftrightarrow> (\<forall> user. snd (users_attr_creation user) = {})"
 
@@ -203,13 +221,8 @@ end
 locale id_ind_cpa = identity_ind_cpa_base + 
   id_sys: identity_system reg_enc_sens_attrs reg_govt_shares reg_govt_token auth ver valid_user valid_attrs valid_token valid_query user_set attrs_set users_attr_creation
   for reg_govt_shares reg_govt_token auth ver valid_user valid_attrs valid_token valid_query user_set attrs_set users_attr_creation
-  + 
-  assumes users_are_valid: "user \<in> user_set \<longrightarrow> valid_user user"
-    and atrrs_are_valid: "attrs \<in> attrs_set \<longrightarrow> valid_attrs attrs"
-    and user_set_not_empty: "user_set \<noteq> {}"
-    and attrs_set_not_empty: "attrs_set \<noteq> {}"
-    and bij_betw_users_attrs: "bij_betw users_attr_creation user_set attrs_set"
-    and valid_user_valid_plains: "\<forall> u0 u1. valid_user u0 \<and> valid_user u1  \<longleftrightarrow> valid_plains (snd (users_attr_creation u0)) (snd (users_attr_creation u1))"
+    + 
+  assumes valid_user_valid_plains: "\<forall> u0 u1. valid_user u0 \<and> valid_user u1  \<longleftrightarrow> valid_plains (snd (users_attr_creation u0)) (snd (users_attr_creation u1))"
 begin
 
 
@@ -232,9 +245,12 @@ lemma if_cases_sens_hiding_attrs:
              else snd (fst ((snd (users_attr_creation (fst (fst y))), snd (users_attr_creation (snd (fst y)))), snd y))) =
                  snd (users_attr_creation (if b then fst (fst y) else snd (fst y)))"
   by(cases b; auto)
-
+declare[[show_types]]
+term "enc.advantage"
+term "id_sys.sens_attrs_hiding_advantage"
 lemma sens_attrs_hiding_reduce_to_ind_cpa:
   shows "id_sys.sens_attrs_hiding_advantage \<A> = enc.advantage (sens_hiding_adversary \<A>)"
+  unfolding id_sys.reg_def id_sys.sens_attrs_hiding_advantage_def enc.advantage_def enc.ind_cpa_def id_sys.sens_attrs_hiding_game_def reg_enc_sens_attrs_def
   including monad_normalisation
 proof-
   note [simp] = split_def Let_def
@@ -260,15 +276,19 @@ proof-
       apply(intro try_spmf_cong bind_spmf_cong[OF refl]; clarsimp?)+ using valid_user_valid_plains by force
     thus ?thesis
       unfolding id_sys.sens_attrs_hiding_advantage_def enc.advantage_def id_sys.sens_attrs_hiding_game_def 
-                enc.ind_cpa_def reg_enc_sens_attrs_def sens_hiding_adversary1_def sens_hiding_adversary2_def
+        enc.ind_cpa_def reg_enc_sens_attrs_def sens_hiding_adversary1_def sens_hiding_adversary2_def
       by(auto simp add: if_cases_sens_hiding_attrs) 
   qed
   then show ?thesis by auto
 qed
 
-lemma perfect_sens_attrs_hiding:
+corollary perfect_sens_attrs_hiding:
   "id_sys.perfect_sens_attrs_hiding \<A>" if "enc.advantage (sens_hiding_adversary \<A>) = 0"
   unfolding id_sys.perfect_sens_attrs_hiding_def
   by (simp add: sens_attrs_hiding_reduce_to_ind_cpa that)
- 
+
+end
+
+(*To consider token hiding we need to define the token value that is returned to the user in the registration phase as being an encrypted value*)
+
 end
