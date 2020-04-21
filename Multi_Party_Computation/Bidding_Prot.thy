@@ -463,9 +463,9 @@ proof-
     _ :: unit \<leftarrow> assert_spmf (nth outputs_mpc2 0);
     return_spmf (s, xb, yb, view, xd, yd)}"
       using R_initial 
-[[simproc del: let_simp]] apply auto
-       apply(intro bind_spmf_cong bind_spmf_cong[OF refl])
-      apply simp apply simp apply simp
+        [[simproc del: let_simp]]
+      apply auto
+      apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp)+
       using b_ge_d f_MPC1_contr_b_lt_d by blast +
     show ?thesis 
     proof(cases "b \<ge> s")
@@ -505,7 +505,8 @@ proof-
     _ :: unit \<leftarrow> assert_spmf (nth outputs_mpc2 0);
     return_spmf (s, xb, yb, view, xd, yd)}"
         apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp?)+
-          apply(cases "\<not> s \<le> max b d")
+          apply(cases "\<not> s \<le> max b d") using
+[[simproc del: let_simp]]
         apply (auto simp add: b_ge_d b_ge_s q_gt_0) 
           apply (metis MPC2_correct assms(1) f_MPC2.simps mod_less_divisor mpc2.correctness_def q_gt_0 valid_inputs_mpc2.simps)
          by (metis b_ge_d b_ge_s ccSUP_bot mem_simps(2) nth_Cons_0 singletonD snd_conv)+

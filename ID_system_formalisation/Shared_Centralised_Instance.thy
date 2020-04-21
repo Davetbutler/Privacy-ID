@@ -32,12 +32,12 @@ locale identity_system =
     and ver :: "'auth_token \<Rightarrow> 'result spmf"
     \<comment> \<open>The government uses the authorised token to determine the response to the query.\<close>
     and valid_user :: "'user \<Rightarrow> bool"
-    and valid_attrs :: "('attrs set \<times> 'sens_atrrs set) \<Rightarrow> bool" 
+    and valid_attrs :: "('non_sens_attrs set \<times> 'sens_atrrs set) \<Rightarrow> bool" 
     and valid_token :: "'token \<Rightarrow> bool"
     and valid_query :: "('user, 'result) query \<Rightarrow> bool"
     and user_set :: "'user set"
-    and attrs_set :: "('attrs set \<times> 'sens_atrrs set) set"
-    and users_attr_creation :: "'user \<Rightarrow> ('attrs set \<times> 'sens_atrrs set)"
+    and attrs_set :: "('non_sens_attrs set \<times> 'sens_atrrs set) set"
+    and users_attr_creation :: "'user \<Rightarrow> ('non_sens_attrs set \<times> 'sens_atrrs set)"
   assumes users_are_valid: "user \<in> user_set \<longrightarrow> valid_user user"
     and atrrs_are_valid: "attrs \<in> attrs_set \<longrightarrow> valid_attrs attrs"
     and user_set_not_empty: "user_set \<noteq> {}"
@@ -58,13 +58,13 @@ lemma all_attrs_valid: "\<forall> attrs. attrs \<in> attrs_set \<longrightarrow>
 
 text\<open>We define the registration phase using the fixes parameters for the user and government.\<close>
 
-definition reg :: "'user \<Rightarrow> ('token \<times> ('share1_sens, 'share2_sens, 'share3_sens) share_user_record) spmf" 
+definition reg :: "'user \<Rightarrow> ('token \<times> ('non_sens_attrs set \<times> ('share1_sens, 'share2_sens, 'share3_sens) share_user_record)) spmf" 
   where "reg user = do {
-   let (attrs, sens_attrs) = users_attr_creation user;
+   let (non_sens_attrs, sens_attrs) = users_attr_creation user;
    enc_attrs \<leftarrow> reg_enc_sens_attrs sens_attrs;
    (S, \<sigma>) \<leftarrow> reg_govt_shares enc_attrs;
    token \<leftarrow> reg_govt_token \<sigma> S;
-   return_spmf (token, S)}"
+   return_spmf (token, (non_sens_attrs, S))}"
 
 sublocale shared_centralised_id: centralised_id reg auth ver valid_user valid_query 
   unfolding centralised_id_def reg_def
@@ -76,7 +76,7 @@ lemma
   assumes "no_sens_attr"
   shows "shared_centralised_id.perfect_sens_attrs_hiding \<A>"
 proof(rule shared_centralised_id.no_sens_attrs_imp_perfect_sens_attrs_hiding)
-  show "\<forall>user token store_non_sens_attr store_sens_attr. (token, store_sens_attr) \<in> set_spmf (reg user) \<longrightarrow> store_sens_attr = {}"
+  show "\<forall>user token store_non_sens_attr store_nons_sens_attrs store_sens_attr. (token, store_nons_sens_attrs, store_sens_attr) \<in> set_spmf (reg user) \<longrightarrow> store_sens_attr = {}"
     unfolding reg_def using assms[unfolded no_sens_attr_def] reg_enc_sens_attrs_empty_set reg_govt_shares_empty_set 
     by(auto simp add: Let_def split_def)  
 qed
