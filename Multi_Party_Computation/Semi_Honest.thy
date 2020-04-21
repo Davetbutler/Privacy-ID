@@ -43,7 +43,7 @@ locale semi_honest_prob =
     and funct :: "'input list \<Rightarrow> ('output list) spmf"
     and protocol :: "'input list \<Rightarrow> ('output list) spmf"
     and outputs :: "'input list \<Rightarrow> 'rand \<Rightarrow> ('output list) spmf"
-    and randmoness :: "'rand spmf"
+    and randomness :: "'rand spmf"
     and real_view_msgs :: "'input list \<Rightarrow> 'rand \<Rightarrow> 'view spmf" \<comment> \<open>the real view of the ith party\<close>
     and sim :: "'input \<Rightarrow> 'output \<Rightarrow> 'view spmf"
     and valid_inputs :: "'input list \<Rightarrow> bool"
@@ -51,7 +51,7 @@ begin
 
 definition real_view :: "'input list \<Rightarrow> ('view \<times> 'output list) spmf"
   where "real_view inputs = do {
-    rand \<leftarrow> randmoness;
+    rand \<leftarrow> randomness;
     view \<leftarrow> real_view_msgs inputs rand;
     outputs :: 'output list \<leftarrow> outputs inputs rand;
     return_spmf (view, outputs)}"
