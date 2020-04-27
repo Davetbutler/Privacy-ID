@@ -108,4 +108,11 @@ next
     by (metis assms cong_def diff_diff_cancel diff_is_0_eq' diff_zero mod_mult_right_eq power_eq_if power_one_right prime_ge_1_nat zero_le_one)
 qed
 
+lemma prime_field:
+  assumes "prime (q::nat)" 
+    and "a < q" 
+    and "a \<noteq> 0"
+  shows "coprime a q"
+  by (meson assms coprime_commute dvd_imp_le linorder_not_le neq0_conv prime_imp_coprime)
+
 end

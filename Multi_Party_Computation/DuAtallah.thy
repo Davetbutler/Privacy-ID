@@ -1,6 +1,7 @@
 theory DuAtallah imports
   CryptHOL.CryptHOL
   "HOL-Number_Theory.Cong"
+  Number_Theory_Aux
   Semi_Honest
   Uniform_Sampling
 begin
@@ -8,6 +9,7 @@ sledgehammer_params[timeout = 1000]
 locale du_atallah_base =
   fixes q :: nat
   assumes q_gt_0 [simp]: "q > 0"
+    and prime_q: "prime q"
 begin
 
 (*definition funct_set :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<times> nat \<times> nat) set"
@@ -25,7 +27,7 @@ fun reconstruct :: "nat list \<Rightarrow> nat spmf"
 fun funct :: "nat list \<Rightarrow> (nat list) spmf"
   where 
     "funct [a,b] = do {
-      a1 \<leftarrow> sample_uniform q;
+      a1 \<leftarrow> sample_uniform_units q;
       a2 \<leftarrow> sample_uniform q;
       let s_a = (q - (a1 * (b + a2)) mod q) mod q;
       let s_b = (b * (a + a1)) mod q;
@@ -35,7 +37,7 @@ fun funct :: "nat list \<Rightarrow> (nat list) spmf"
 fun protocol :: "nat list \<Rightarrow> (nat list) spmf"
   where 
     "protocol [a,b] = do {
-      a1 \<leftarrow> sample_uniform q;
+      a1 \<leftarrow> sample_uniform_units q;
       a2 \<leftarrow> sample_uniform q;
       let s_a = (q - (a1 * (b + a2)) mod q) mod q;
       let s_b = (b * (a + a1)) mod q;
@@ -137,7 +139,9 @@ lemma
 
 (*Party 1 secruity*)
 
-definition "randomness_1 = sample_uniform q"
+definition "randomness_1 = do {
+          a1 :: nat \<leftarrow> sample_uniform_units q;
+          return_spmf (a1)}"
 
 fun real_view_msgs_1 :: "nat list \<Rightarrow> nat \<Rightarrow> (nat \<times> nat \<times> nat) spmf" 
   where "real_view_msgs_1 [a,b,c] a1 = do {
@@ -145,13 +149,30 @@ fun real_view_msgs_1 :: "nat list \<Rightarrow> nat \<Rightarrow> (nat \<times> 
           let msg = (b + a2) mod q;
           return_spmf (a, a1, msg)}"
 
-fun outputs_1 :: "nat list \<Rightarrow> nat \<Rightarrow> (nat list) spmf"
-  where "outputs_1 [a,b,c] a1 = do {
-          a2 :: nat \<leftarrow> sample_uniform q;
+fun outputs_1 :: "nat list \<Rightarrow> (nat \<times> nat \<times> nat) \<Rightarrow> (nat list) spmf"
+  where "outputs_1 [a,b,c] view = do {
+          let (a, a1, msg) = view;
+          let a2 = (msg + (q - b)) mod q;
           let s_a = (q - (a1 * (b + a2)) mod q) mod q;
           let s_b = (b * (a + a1)) mod q;
           let s_c = (a1 * a2) mod q;
           return_spmf [s_a,s_b,s_c]}"
+
+lemma *:
+  assumes "msg = (b + a2) mod q" and "b < q" and "a2 < q"
+  shows "a2 = (msg + (q - b)) mod q"
+proof -
+  have "\<forall>n. (a2 + (b + n)) mod q = (n + msg) mod q"
+    using assms(1) by presburger
+  then show ?thesis
+    by (metis (no_types) add.commute add_diff_inverse_nat assms(2) assms(3) le_simps(1) mod_add_self1 mod_less not_less)
+qed
+
+lemma funct_outputs_eq :assumes "b < q"
+  shows "funct [a,b] = sample_uniform_units q \<bind> (\<lambda> a1. real_view_msgs_1 [a,b,c] a1 \<bind> (\<lambda> view. outputs_1 [a,b,c] view))"
+    apply(simp add: Let_def)
+  apply(intro bind_spmf_cong[OF refl]; clarify?)+
+  using * assms by simp
 
 definition sim1 :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<times> nat \<times> nat) spmf"
   where "sim1 a out1 = do {
@@ -162,25 +183,147 @@ fun valid_inputs where "valid_inputs [a,b,c] = (a < q \<and> b < q)"
 
 sublocale sec_party1: semi_honest_prob 0 funct protocol outputs_1 randomness_1 real_view_msgs_1 sim1 valid_inputs .
 
+lemma b_rewrite:
+  assumes "s_a = (q - (a1 * (b + a2)) mod q) mod q" and "a1 \<noteq> 0" and "a1 < q" and "a2 < q" and b_lt_q: "b < q"
+  shows "b = ((q - s_a) * (fst (bezw a1 q)) + (q - a2)) mod q"
+proof-
+  have coprime: "gcd a1 q = 1" 
+    using prime_q assms(2) assms(3) prime_field by simp 
+  have *: "[- int a2 = (q - a2)] (mod q)" 
+    using assms cong_def int_ops(6) by fastforce
+  have s_a_lt_q: "s_a < q" using assms by simp
+  have "[s_a = (q - (a1 * (b + a2)) mod q)] (mod q)" 
+    using assms cong_def by simp
+  hence "[s_a + (a1 * (b + a2)) mod q = q] (mod q)"
+    by (metis (mono_tags, lifting) cong_def le_add_diff_inverse2 mod_add_left_eq mod_le_divisor q_gt_0)
+  hence "[(a1 * (b + a2)) mod q = q - s_a] (mod q)"
+    using s_a_lt_q   
+    by (metis cong_add_lcancel_nat le_add_diff_inverse le_simps(1))
+  hence "[a1 * (b + a2) = q - s_a] (mod q)"
+    using cong_mod_left by blast
+  hence "[(b + a2) * a1 = q - s_a] (mod q)"
+    by (simp add: mult.commute)
+  hence "[(b + a2) * a1 * (fst (bezw a1 q)) = (q - s_a) * (fst (bezw a1 q))] (mod q)"
+    using cong_int_iff cong_scalar_right by blast
+  hence "[(b + a2) * (a1 * (fst (bezw a1 q))) = (q - s_a) * (fst (bezw a1 q))] (mod q)"
+    by (simp add: mult.assoc)
+  hence "[(b + a2) * 1 = (q - s_a) * (fst (bezw a1 q))] (mod q)"
+    using inverse coprime q_gt_0 
+    by (smt Num.of_nat_simps(2) Num.of_nat_simps(5) cong_cong_mod_int cong_def cong_scalar_right mult.commute)
+  hence **: "[(int b + int a2) = int (q - s_a) * (fst (bezw a1 q))] (mod q)"
+    by simp
+  hence "[int b = (q - s_a) * (fst (bezw a1 q)) - int a2] (mod q)" 
+    by (smt cong_diff_iff_cong_0)
+  hence "[b = (q - s_a) * (fst (bezw a1 q)) + (q - a2)] (mod q)" 
+    using * ** cong_add by fastforce
+  thus ?thesis 
+    using b_lt_q by (simp add: cong_def)
+qed
+
+
+
 notepad 
 begin
-  fix a b c a1 :: nat
+  fix a b c :: nat
+  assume b_lt_q: "b < q"
   have "sec_party1.real_view [a,b,c] = do {
-    a1 \<leftarrow> randomness_1;
-    view :: (nat \<times> nat \<times> nat) \<leftarrow> real_view_msgs_1 [a,b,c] a1;
-    outputs \<leftarrow> outputs_1 [a,b,c] a1;
-    return_spmf (view, outputs)}"  
+    rand \<leftarrow> randomness_1;
+    view :: (nat \<times> nat \<times> nat)  \<leftarrow> real_view_msgs_1 [a,b,c] rand;
+    outputs \<leftarrow> outputs_1 [a,b,c] view;
+    return_spmf (view, outputs)}"
     by(simp add: sec_party1.real_view_def)
+  also have "... = do {
+    a1 \<leftarrow> sample_uniform_units q;
+    view :: (nat \<times> nat \<times> nat)  \<leftarrow> real_view_msgs_1 [a,b,c] a1;
+    outputs \<leftarrow> outputs_1 [a,b,c] view;
+    return_spmf (view, outputs)}"
+
+
+  have "sec_party1.real_view [a,b,c] = do {
+    rand \<leftarrow> randomness_1;
+    view :: (nat \<times> nat \<times> nat)  \<leftarrow> real_view_msgs_1 [a,b,c] rand;
+    outputs \<leftarrow> outputs_1 [a,b,c] rand;
+    return_spmf (view, outputs)}"
+    by(simp add: sec_party1.real_view_def)
+  also have "... = do {
+    a1 \<leftarrow> sample_uniform_units q;
+    outputs \<leftarrow> outputs_1 [a,b,c] a1;
+    view :: (nat \<times> nat \<times> nat)  \<leftarrow> real_view_msgs_1 [a,b,c] a1;
+    return_spmf (view, outputs)}"
+    including monad_normalisation
+    by(simp add: randomness_1_def)
+  also have "... = do {
+    a1 \<leftarrow> sample_uniform_units q;
+    outputs \<leftarrow> outputs_1 [a,b,c] a1;
+    msg :: nat \<leftarrow> map_spmf (\<lambda> a2. (b + a2) mod q) (sample_uniform q);
+    let view = (a, a1, msg);
+    return_spmf (view, outputs)}"
+    by(simp add: bind_map_spmf o_def Let_def)
+  also have "... = do {
+    a1 \<leftarrow> sample_uniform_units q;
+    a2 :: nat \<leftarrow> sample_uniform q;
+    let s_a = (q - (a1 * (b + a2)) mod q) mod q;
+    let s_b = (b * (a + a1)) mod q;
+    let s_c = (a1 * a2) mod q;
+    let outputs = [s_a,s_b,s_c];
+    msg :: nat \<leftarrow> sample_uniform q;
+    let view = (a, a1, msg);
+    return_spmf (view, outputs)}"
+    by(simp add: samp_uni_plus_one_time_pad)
+
+
+  also have "... = do {
+    a1 :: nat \<leftarrow> sample_uniform_units q;
+    a2 :: nat \<leftarrow> sample_uniform q;
+    let msg = (b + a2) mod q;
+    let view = (a, a1, msg);
+    let s_a = (q - (a1 * (b + a2)) mod q) mod q;
+    let s_b = (b * (a + a1)) mod q;
+    let s_c = (a1 * a2) mod q;
+    let outputs = [s_a,s_b,s_c];
+    return_spmf (view, outputs)}"
+    apply(auto simp add: randomness_1_def)
+  also have "... = do {
+    a1 :: nat \<leftarrow> sample_uniform_units q;
+    a2 :: nat \<leftarrow> sample_uniform q;
+    let s_a = (q - (a1 * (b + a2)) mod q) mod q;
+    let msg = nat (((q - s_a) * (fst (bezw a1 q)) + (q - a2)) mod q + a2) mod q;
+    let view = (a, a1, msg);
+    let s_b = (b * (a + a1)) mod q;
+    let s_c = (a1 * a2) mod q;
+    let outputs = [s_a,s_b,s_c];
+    return_spmf (view, outputs)}"
+    apply(simp add: Let_def)
+    apply(intro bind_spmf_cong[OF refl]; clarify?)+
+    apply auto
+    by (metis b_rewrite b_lt_q nat_int_add neq0_conv)
+  also have "... = do {
+    a1 :: nat \<leftarrow> sample_uniform_units q;
+    a2 :: nat \<leftarrow> sample_uniform q;
+    let s_a = (q - (a1 * (b + a2)) mod q) mod q;
+    let s_b = (b * (a + a1)) mod q;
+    let s_c = (a1 * a2) mod q;
+    let outputs = [s_a,s_b,s_c];
+    let msg = nat (((q - s_a) * (fst (bezw a1 q)) + (q - a2)) mod q + a2) mod q;
+    let view = (a, a1, msg);
+    return_spmf (view, outputs)}"
+
+
   also have "... = do {
     a1 :: nat \<leftarrow> sample_uniform q;
     a2 :: nat \<leftarrow> sample_uniform q;
     let msg = (b + a2) mod q;
     let view = (a, a1, msg);
-    outputs \<leftarrow> funct [a,b];
+    let s_a = (q - (a1 * msg) mod q) mod q;
+    let s_b = (b * (a + a1)) mod q;
+    let s_c = (a1 * a2) mod q;
+    let outputs = [s_a,s_b,s_c];
     return_spmf (view, outputs)}"
-    apply(auto simp add: randomness_1_def )
+    apply(simp add: Let_def)
 
-    apply(intro bind_spmf_cong[OF refl])
+    apply(intro bind_spmf_cong[OF refl]; clarify?)+
+    apply auto
+    by (simp add: mod_mult_right_eq)
 
     using randomness_1_def
     by auto
