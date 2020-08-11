@@ -3,7 +3,7 @@ subsection \<open>Secure multiplication protocol\<close>
 theory Secure_Multiplication imports
   CryptHOL.Cyclic_Group_SPMF   
   Uniform_Sampling 
-  Semi_Honest_Def
+  Semi_Honest
 begin
 
 locale secure_mult =
@@ -11,16 +11,16 @@ locale secure_mult =
   assumes q_gt_0: "q > 0"
 begin
 
-type_synonym real_view = "nat \<Rightarrow> nat \<Rightarrow> ((nat \<times> nat \<times> nat \<times> nat) \<times> nat \<times> nat) spmf"
-type_synonym sim = "nat \<Rightarrow> nat \<Rightarrow> ((nat \<times> nat \<times> nat \<times> nat) \<times> nat \<times> nat) spmf"
+type_synonym real_view = "nat list \<Rightarrow> ((nat \<times> nat \<times> nat)) spmf"
+type_synonym sim = "nat \<Rightarrow> nat \<Rightarrow> ((nat \<times> nat \<times> nat)) spmf"
 
 lemma samp_uni_set_spmf [simp]: "set_spmf (sample_uniform q) = {..< q}" 
   by(simp add: sample_uniform_def)
 
-definition funct :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<times> nat) spmf"
-  where "funct x y = do {
+fun funct :: "nat list \<Rightarrow> (nat list) spmf"
+  where "funct [x, y] = do {
     s \<leftarrow> sample_uniform q;
-    return_spmf (s, (x*y + (q - s)) mod q)}"
+    return_spmf [s, (x*y + (q - s)) mod q]}"
 
 definition TI :: "((nat \<times> nat) \<times> (nat \<times> nat)) spmf"
   where "TI = do {
@@ -29,62 +29,119 @@ definition TI :: "((nat \<times> nat) \<times> (nat \<times> nat)) spmf"
     r \<leftarrow> sample_uniform q;
     return_spmf ((a, r), (b, ((a*b + (q - r)) mod q)))}"
 
-definition out :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<times> nat) spmf"
-  where "out x y = do {
-    ((c1,d1),(c2,d2)) \<leftarrow> TI;
-    let e2 = (x + c1) mod q;
-    let e1 = (y + (q - c2)) mod q;
-    return_spmf (((x*e1 + (q - d1)) mod q), ((e2 * c2 + (q - d2)) mod q))}"
+lemma party1_view_e1_c2:
+  assumes e: "e1 = (y + (q - c2)) mod q" and c: "c2 < q" and "y < q"
+  shows "c2 = (y + q - e1) mod q"
+proof-
+  have "[e1 = (y + (q - c2))] (mod q)" 
+    using assms cong_def by simp
+  hence *: "[e1 + c2 = y + q] (mod q)"
+    by (smt ab_semigroup_add_class.add_ac(1) add.commute assms(2) cong_add_lcancel_nat le_add_diff_inverse order_less_imp_le)
+  hence "[c2 = (y + q) - e1] (mod q)"
+  proof-
+    have "(y + q) - e1 > 0" 
+      by (metis e add_gr_0 mod_le_divisor mod_less_divisor ordered_cancel_comm_monoid_diff_class.diff_add_assoc q_gt_0 zero_less_diff)
+    thus ?thesis 
+    proof -
+      have "[e1 = e1] (mod q)"
+        by simp
+      then show ?thesis
+        by (metis (no_types) \<open>0 < y + q - e1\<close> \<open>[e1 + c2 = y + q] (mod q)\<close> cong_diff_nat diff_add_inverse le_add_same_cancel1 order_less_imp_le zero_le zero_less_diff)
+    qed
+  qed
+  thus ?thesis 
+    by (metis mod_if cong_def c)
+qed
 
-definition R1 :: "real_view"
-  where "R1 x y = do {
+fun outputs1 :: "nat list \<Rightarrow> (nat \<times> nat \<times> nat) \<Rightarrow> (nat list) spmf"
+  where "outputs1 [x, y] view = do {
+    let (c1, d1, e1) = view;
+    let c2 = (y + q - e1) mod q;
+    let d2 = ((c1*c2 + (q - d1)) mod q);
+    let e2 = (x + c1) mod q;
+    return_spmf [((x*e1 + (q - d1)) mod q), ((e2 * c2 + (q - d2)) mod q)]}"
+
+fun R1 :: "real_view"
+  where "R1 [x, y] = do {
     ((c1, d1), (c2, d2)) \<leftarrow> TI;
     let e2 = (x + c1) mod q;
     let e1 = (y + (q - c2)) mod q;
     let s1 = (x*e1 + (q - d1)) mod q;
     let s2 = (e2 * c2 + (q - d2)) mod q;
-    return_spmf ((x, c1, d1, e1), s1, s2)}"
+    return_spmf ((c1, d1, e1))}"
 
-definition S1 :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<times> nat \<times> nat \<times> nat) spmf" 
+definition S1 :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<times> nat \<times> nat) spmf" 
   where "S1 x s1 = do {
     a :: nat \<leftarrow> sample_uniform q;  
     e1 \<leftarrow> sample_uniform q;
     let d1 = (x*e1 + (q - s1)) mod q;
-    return_spmf (x, a, d1, e1)}"
+    return_spmf (a, d1, e1)}"
 
-definition Out1 :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (nat \<times> nat) spmf"
-  where "Out1 x y s1 = do {
-    let s2 = (x*y + (q - s1)) mod q;
-    return_spmf (s1,s2)}"
+lemma assumes e: "e2 = (x + a) mod q" and "d2 = (a*b + (q - r)) mod q" and "x < q" and  "a < q" and "b < q" and "r < q"
+  shows "r = (((e2 + q - x) mod q) * b + q - d2) mod q"
+proof-
+  have d2_lt_q: "d2 < q" using assms by simp
+  have "a = (e2 + q - x) mod q"
+  proof-
+    have "[e2 + q = x + a] (mod q)" using e cong_def by force
+    hence "[e2 + q - x = a] (mod q)" 
+    proof-
+      have "e2 + q - x > 0" 
+        using assms(3) by linarith
+      thus ?thesis sorry
+    qed
+    thus ?thesis using cong_def assms by(metis mod_if)
+  qed
+  moreover have "r = (a*b + q - d2) mod q"
+  proof-
+    have "[d2 = a*b + (q - r)] (mod q)" using assms cong_def by force
+    hence "[d2 + r = a*b + q] (mod q)" 
+      by(smt ab_semigroup_add_class.add_ac(1) add.commute assms cong_add_lcancel_nat le_add_diff_inverse order_less_imp_le)
+    hence "[r = a*b + q - d2] (mod q)"    
+      by (metis Nat.add_diff_assoc d2_lt_q cong_add_lcancel_nat le_add_diff_inverse less_or_eq_imp_le neq0_conv not_add_less1 zero_less_diff) 
+    thus ?thesis  using cong_def assms by(metis mod_if)
+  qed
+  ultimately show ?thesis by blast
+qed
 
-definition R2 :: "real_view"
-  where "R2 x y = do {
-    ((c1, d1), (c2, d2)) \<leftarrow> TI;
-    let e2 = (x + c1) mod q;
+fun outputs2 :: "nat list \<Rightarrow> (nat \<times> nat \<times> nat) \<Rightarrow> (nat list) spmf"
+  where "outputs2 [x, y] view = do {
+    let (c2, d2, e2) = view;
+    let d1 = (((e2 + q - x) mod q) * c2 + q - d2) mod q;
     let e1 = (y + (q - c2)) mod q;
     let s1 = (x*e1 + (q - d1)) mod q;
     let s2 = (e2 * c2 + (q - d2)) mod q;
-    return_spmf ((y, c2, d2, e2), s1, s2)}"
+    return_spmf [s1,s2]}"
 
-definition S2 :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<times> nat \<times> nat \<times> nat) spmf"
+fun R2 :: "real_view"
+  where "R2 [x, y] = do {
+    ((c1, d1), (c2, d2)) \<leftarrow> TI;
+    let e2 = (x + c1) mod q;
+    return_spmf (c2, d2, e2)}"
+
+definition S2 :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<times> nat \<times> nat) spmf"
   where "S2 y s2 = do { 
     b \<leftarrow> sample_uniform q;
     e2 \<leftarrow> sample_uniform q;
     let d2 = (e2*b + (q - s2)) mod q;
-    return_spmf (y, b, d2, e2)}"
+    return_spmf (b, d2, e2)}"
 
 definition Out2 :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> (nat \<times> nat) spmf"
   where "Out2 y x s2 = do {
     let s1 = (x*y + (q - s2)) mod q;
     return_spmf (s1,s2)}"
 
-definition Ideal2 :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> ((nat \<times> nat \<times> nat \<times> nat) \<times> (nat \<times> nat)) spmf"
+definition Ideal2 :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> ((nat \<times> nat \<times> nat) \<times> (nat \<times> nat)) spmf"
   where "Ideal2 y x out2 = do {
-    view2 :: (nat \<times> nat \<times> nat \<times> nat) \<leftarrow> S2 y out2;
+    view2 :: (nat \<times> nat \<times> nat) \<leftarrow> S2 y out2;
     out2 \<leftarrow> Out2 y x out2;
     return_spmf (view2, out2)}"
 
-sublocale sim_non_det_def: sim_non_det_def R1 S1 Out1 R2 S2 Out2 funct .
+fun valid_inputs where "valid_inputs [x,y] \<longleftrightarrow> (x < q \<and> y < q)"
+
+sublocale party1: semi_honest_prob 0 funct outputs1 R1 S1 valid_inputs .
+
+sublocale party2: semi_honest_prob 1 funct outputs2 R2 S2 valid_inputs .
 
 lemma minus_mod:
   assumes "a > b"
@@ -403,6 +460,15 @@ proof-
   then show ?thesis by(simp add: cong_def d2)
 qed
 
+lemma d2': 
+  assumes x: "x < q"
+    and y: "y < q" 
+    and r: "r < q" 
+    and b: "b < q" 
+    and e2: "e2 < q"
+  shows "(((e2 + q - x) mod q)*b + (q - r)) mod q = (e2*b + (q - ((x*y + (q - ((x*((y + (q - b)) mod q) + (q - r)) mod q))) mod q))) mod q" 
+  using assms d2 by blast
+
 lemma d2_P2:
   assumes x: "x < q" and y: "y < q" and r: "b < q" and b: "e2 < q" and e2: "r < q"
   shows "((y, b, ((e2 + q - x) mod q * b + q - r) mod q, e2), (x * ((y + q - b) mod q) + q - r) mod q, (x * y + q - (x * ((y + q - b) mod q) + q - r) mod q) mod q) =
@@ -460,105 +526,137 @@ proof-
   then show ?thesis using assms s1 by blast 
 qed
 
-theorem P2_security:
-  assumes "x < q" "y < q"
-  shows "sim_non_det_def.perfect_sec_P2 x y"
-  including monad_normalisation
+lemma party2_views_equal:
+  assumes "valid_inputs [x,y]"
+  shows "party2.real_view [x,y] = party2.ideal_view [x,y]"
 proof-
-  have "((funct x y) \<bind> (\<lambda> (s1',s2'). (sim_non_det_def.Ideal2 y x s2'))) = R2 x y"
-  proof-
-    have "R2 x y = do {
-      a :: nat \<leftarrow> sample_uniform q;  
-      b :: nat \<leftarrow> sample_uniform q;
-      r :: nat \<leftarrow> sample_uniform q;
-      let c1 = a;
-      let d1 = r;
-      let c2 = b;
-      let d2 = ((a*b + (q - r)) mod q);
-      let e2 = (x + c1) mod q;
-      let e1 = (y + (q - c2)) mod q;
-      let s1 = (x*e1 + (q - r)) mod q;
-      let s2 = (e2 * c2 + (q - d2)) mod q;
-      return_spmf ((y, c2, d2, e2), s1, s2)}"
-      by(simp add: R2_def TI_def Let_def)
-    also have "... = do {
-      a :: nat \<leftarrow> sample_uniform q;  
-      b :: nat \<leftarrow> sample_uniform q;
-      r :: nat \<leftarrow> sample_uniform q;
-      let c1 = a;
-      let d1 = r;
-      let c2 = b;
-      let e2 = (x + c1) mod q;
-      let d2 = ((((e2 + q - x) mod q)*b + (q - r)) mod q);
-      let s1 = (x*((y + (q - c2)) mod q) + (q - r)) mod q;
-      return_spmf ((y, c2, d2, e2), (s1, (x*y + (q - s1)) mod q))}"
-      by(simp add: Let_def s1_s2_P2 assms c1_P2 cong: bind_spmf_cong_simp)
-    also have "... = do {
-      b :: nat \<leftarrow> sample_uniform q;
-      r :: nat \<leftarrow> sample_uniform q;
-      let d1 = r;
-      let c2 = b;
-      e2 \<leftarrow> map_spmf (\<lambda> c1. (x + c1) mod q) (sample_uniform q);
-      let d2 = ((((e2 + q - x) mod q)*b + (q - r)) mod q);
-      let s1 = (x*((y + (q - c2)) mod q) + (q - r)) mod q;
-      return_spmf ((y, c2, d2, e2), s1, (x*y + (q - s1)) mod q)}"
-      by(simp add: bind_map_spmf o_def Let_def)
-    also have "... = do {
-      b :: nat \<leftarrow> sample_uniform q;
-      r :: nat \<leftarrow> sample_uniform q;
-      let d1 = r;
-      let c2 = b;
-      e2 \<leftarrow> sample_uniform q;
-      let d2 = (((e2 + q - x) mod q)*b + (q - r)) mod q;
-      let s1 = (x*((y + (q - c2)) mod q) + (q - r)) mod q;
-      return_spmf ((y, c2, d2, e2), s1, (x*y + (q - s1)) mod q)}"
-      by(simp add: samp_uni_plus_one_time_pad)
-    also have "... = do {
-      b :: nat \<leftarrow> sample_uniform q;
-      r :: nat \<leftarrow> sample_uniform q;
-      e2 \<leftarrow> sample_uniform q;
-      let s1 = (x*((y + (q - b)) mod q) + (q - r)) mod q;
-      let s2 = (x*y + (q - s1)) mod q;
-      let d2 = (((e2 + q - x) mod q)*b + (q - r)) mod q;
-      return_spmf ((y, b, d2, e2), s1, s2)}"
-      by(simp)
-    also have "... = do {
-      b :: nat \<leftarrow> sample_uniform q;
-      r :: nat \<leftarrow> sample_uniform q;
-      e2 \<leftarrow> sample_uniform q;
-      let s1 = (x*((y + (q - b)) mod q) + (q - r)) mod q;
-      let s2 = (x*y + (q - s1)) mod q;
-      let d2 = (e2*b + (q - s2)) mod q;
-      return_spmf ((y, b, d2, e2), s1, s2)}"
-      by(simp add: d2_P2 assms Let_def cong: bind_spmf_cong_simp)
-    also have "... = do {
-      b :: nat \<leftarrow> sample_uniform q;
-      e2 \<leftarrow> sample_uniform q;
-      s1 \<leftarrow> map_spmf (\<lambda> r. (x*((y + (q - b)) mod q) + (q - r)) mod q) (sample_uniform q);
-      let s2 = (x*y + (q - s1)) mod q;
-      let d2 = (e2*b + (q - s2)) mod q;
-      return_spmf ((y, b, d2, e2), s1, s2)}"
-      by(simp add: bind_map_spmf o_def Let_def)
-    also have "... = do {
-      b :: nat \<leftarrow> sample_uniform q;
-      e2 \<leftarrow> sample_uniform q;
-      s1 \<leftarrow> sample_uniform q;
-      let s2 = (x*y + (q - s1)) mod q;
-      let d2 = (e2*b + (q - s2)) mod q;
-      return_spmf ((y, b, d2, e2), s1, s2)}"
-      by(simp add: samp_uni_minus_one_time_pad)
-    also have "... = do {
-      b :: nat \<leftarrow> sample_uniform q;
-      e2 \<leftarrow> sample_uniform q;
-      s1 \<leftarrow> sample_uniform q;
-      let s2 = (x*y + (q - s1)) mod q;
-      let d2 = (e2*b + (q - s2)) mod q;
-      return_spmf ((y, b, d2, e2), (x*y + (q - s2)) mod q, s2)}"
-      by(simp add: s1_P2 assms Let_def cong: bind_spmf_cong_simp)
-    ultimately show ?thesis by(simp add: funct_def Let_def sim_non_det_def.Ideal2_def Out2_def S2_def R2_def)
-  qed
-  then show ?thesis by(simp add: sim_non_det_def.perfect_sec_P2_def)
+  have x_lt_q: "x < q" and y_lt_q: "y < q" 
+    using assms by auto
+  have "party2.real_view [x,y] = do {
+    a \<leftarrow> sample_uniform q;  
+    b \<leftarrow> sample_uniform q;
+    r \<leftarrow> sample_uniform q;
+    let c1 = a;
+    let c2 = b;
+    let d2 = (a*b + (q - r)) mod q;
+    let e2 = (x + c1) mod q;
+    let view = (c2, d2, e2);
+    let d1 = (((e2 + q - x) mod q) * c2 + q - d2) mod q;
+    let e1 = (y + (q - c2)) mod q;
+    let s1 = (x*e1 + (q - d1)) mod q;
+    let s2 = (e2 * c2 + (q - d2)) mod q;
+    let outputs = [s1,s2];
+    return_spmf (y,view, outputs)}"
+    unfolding semi_honest_prob.real_view_def
+    by(simp add: party2.real_view_def split_def Let_def TI_def)
+  also have "... = do {
+    a \<leftarrow> sample_uniform q;  
+    b \<leftarrow> sample_uniform q;
+    r \<leftarrow> sample_uniform q;
+    let c1 = a;
+    let c2 = b;
+    let d2 = (a*b + (q - r)) mod q;
+    let e2 = (x + c1) mod q;
+    let view = (c2, d2, e2);
+    let d1 = r;
+    let e1 = (y + (q - c2)) mod q;
+    let s1 = (x*e1 + (q - r)) mod q;
+    let s2 = (e2 * c2 + (q - d2)) mod q;
+    let outputs = [s1,s2];
+    return_spmf (y, view, outputs)}"
+    apply(simp add: Let_def)
+      apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp)+
+    using c1 s1 x_lt_q by auto
+  also have "... = do {
+    a \<leftarrow> sample_uniform q;  
+    b \<leftarrow> sample_uniform q;
+    r \<leftarrow> sample_uniform q;
+    let c1 = a;
+    let d1 = r;
+    let c2 = b;
+    let e2 = (x + c1) mod q;
+    let d2 = ((((e2 + q - x) mod q)*b + (q - r)) mod q);
+    let e1 = (y + (q - c2)) mod q;
+    let s1 = (x*((y + (q - c2)) mod q) + (q - r)) mod q;
+    let s2 = (x*y + (q - s1)) mod q;
+    let outputs = [s1,s2];
+    return_spmf (y, (c2, d2, e2), outputs)}"
+    apply(simp add: Let_def)
+    apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp)+
+    by (metis c1 s1_s2 x_lt_q y_lt_q )
+  also have "... = do { 
+    b \<leftarrow> sample_uniform q;
+    r \<leftarrow> sample_uniform q;
+    let d1 = r;
+    let c2 = b;
+    e2 \<leftarrow> map_spmf (\<lambda> c1. (x + c1) mod q) (sample_uniform q);
+    let d2 = ((((e2 + q - x) mod q)*b + (q - r)) mod q);
+    let s1 = (x*((y + (q - c2)) mod q) + (q - r)) mod q;
+    let s2 = (x*y + (q - s1)) mod q;
+    let outputs = [s1,s2];
+    return_spmf (y, (c2, d2, e2), outputs)}"
+    including monad_normalisation
+    by(simp add: bind_map_spmf o_def Let_def)
+  also have "... = do { 
+    b \<leftarrow> sample_uniform q;
+    r \<leftarrow> sample_uniform q;
+    let d1 = r;
+    let c2 = b;
+    e2 \<leftarrow> sample_uniform q;
+    let d2 = ((((e2 + q - x) mod q)*b + (q - r)) mod q);
+    let s1 = (x*((y + (q - c2)) mod q) + (q - r)) mod q;
+    let s2 = (x*y + (q - s1)) mod q;
+    let outputs = [s1,s2];
+    return_spmf (y, (c2, d2, e2), outputs)}"
+    by(simp add: samp_uni_plus_one_time_pad)
+  also have "... = do { 
+    b \<leftarrow> sample_uniform q;
+    r \<leftarrow> sample_uniform q;
+    let d1 = r;
+    let c2 = b;
+    e2 \<leftarrow> sample_uniform q;
+    let s1 = (x*((y + (q - b)) mod q) + (q - r)) mod q;
+    let s2 = (x*y + (q - s1)) mod q;
+    let d2 = (e2*b + (q - s2)) mod q;
+    let outputs = [s1,s2];
+    return_spmf (y, (c2, d2, e2), outputs)}"
+    apply(simp add: Let_def)
+    apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp)+
+    by (smt d2' y_lt_q x_lt_q mod_le_divisor order_less_imp_le ordered_cancel_comm_monoid_diff_class.diff_add_assoc q_gt_0)
+  also have "... = do { 
+    b \<leftarrow> sample_uniform q;
+    let c2 = b;
+    e2 \<leftarrow> sample_uniform q;
+    s1 \<leftarrow> map_spmf (\<lambda> r. (x*((y + (q - b)) mod q) + (q - r)) mod q) (sample_uniform q);
+    let s2 = (x*y + (q - s1)) mod q;
+    let d2 = (e2*b + (q - s2)) mod q;
+    let outputs = [s1,s2];
+    return_spmf (y, (c2, d2, e2), outputs)}"
+    including monad_normalisation
+    by(simp add: bind_map_spmf o_def Let_def)
+  also have "... = do { 
+    b \<leftarrow> sample_uniform q;
+    let c2 = b;
+    e2 \<leftarrow> sample_uniform q;
+    s1 \<leftarrow> sample_uniform q;
+    let s2 = (x*y + (q - s1)) mod q;
+    let d2 = (e2*b + (q - s2)) mod q;
+    let outputs = [s1,s2];
+    return_spmf (y, (c2, d2, e2), outputs)}"
+    by(simp add: samp_uni_minus_one_time_pad)
+  also have "... = do { 
+    outputs \<leftarrow> funct [x,y];
+    view \<leftarrow> S2 y (nth outputs 1);
+    return_spmf (y, view, outputs)}"
+    including monad_normalisation
+    by(simp add: Let_def S2_def)
+  ultimately show ?thesis 
+    by(simp add: party2.ideal_view_def semi_honest_prob.ideal_view_def)
 qed
+
+theorem party2_perfect_security:
+  shows "party2.perfect_security [x,y]"
+  unfolding party2.perfect_security_def using party2_views_equal by blast
 
 lemma s1_s2_P1:  assumes "x < q" "xa < q" "xb < q" "xc < q" "y < q"
   shows "((x, xa, xb, (y + q - xc) mod q), (x * ((y + q - xc) mod q) + q - xb) mod q, ((x + xa) mod q * xc + q - (xa * xc + q - xb) mod q) mod q) = 
@@ -567,8 +665,8 @@ lemma s1_s2_P1:  assumes "x < q" "xa < q" "xb < q" "xc < q" "y < q"
 
 lemma mod_minus: assumes "a - b > 0" and "c - d > 0" 
   shows "(a - b + (c - d mod q)) mod q = (a - b + (c - d)) mod q"
-  using assms
-  by (metis cong_def minus_mod mod_add_right_eq zero_less_diff)
+  using assms 
+  by (metis cong_def minus_mod mod_add_cong zero_less_diff)
 
 lemma r: 
   assumes e1: "e1 = (y + (q - b)) mod q" 
@@ -701,27 +799,45 @@ proof-
   then show ?thesis using assms by simp
 qed
 
-theorem P1_security:
-  assumes "x < q" "y < q"
-  shows "sim_non_det_def.perfect_sec_P1 x y"
-  including monad_normalisation
+lemma party1_equal_views:
+  assumes "valid_inputs [x,y]"
+  shows "party1.real_view [x,y] = party1.ideal_view [x,y]"
 proof-
-  have "(funct x y) \<bind> (\<lambda> (s1',s2'). (sim_non_det_def.Ideal1 x y s1')) = R1 x y"
-  proof-
-    have "R1 x y = do {
+  have x_lt_q: "x < q" and y_lt_q: "y < q" 
+    using assms by auto
+  have "party1.real_view [x,y] = do {
     a :: nat \<leftarrow> sample_uniform q;  
     b :: nat \<leftarrow> sample_uniform q;
-    r :: nat \<leftarrow> sample_uniform q;    
+    r :: nat \<leftarrow> sample_uniform q;
     let c1 = a;
     let d1 = r;
     let c2 = b;
-    let d2 = ((a*b + (q - r)) mod q);
+    let e1 = (y + (q - c2)) mod q;
+    let d2 = ((c1*((y + q - e1) mod q) + (q - r)) mod q);
+    let e2 = (x + c1) mod q;
+    let s1 = (x*e1 + (q - d1)) mod q;
+    let s2 = (e2 *((y + q - e1) mod q) + (q - d2)) mod q;
+    let outputs = [s1, s2];
+    return_spmf (x, (c1, d1, e1), outputs)}"
+    including monad_normalisation
+    by(auto simp add: party1.real_view_def split_def TI_def Let_def)
+  also have "... = do {
+    a :: nat \<leftarrow> sample_uniform q;  
+    b :: nat \<leftarrow> sample_uniform q;
+    r :: nat \<leftarrow> sample_uniform q;
+    let c1 = a;
+    let d1 = r;
+    let c2 = b;
+    let d2 = ((c1*c2 + (q - r)) mod q);
     let e2 = (x + c1) mod q;
     let e1 = (y + (q - c2)) mod q;
     let s1 = (x*e1 + (q - d1)) mod q;
-    let s2 = (e2 * c2 + (q - d2)) mod q;
-    return_spmf ((x, c1, d1, e1), s1, s2)}"
-      by(simp add: R1_def TI_def Let_def)
+    let s2 = (e2 *c2 + (q - d2)) mod q;
+    let outputs = [s1, s2];
+    return_spmf (x, (c1, d1, e1), outputs)}"
+    apply simp
+      apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp)+
+    using party1_view_e1_c2 x_lt_q y_lt_q by simp
     also have "... = do {
     a :: nat \<leftarrow> sample_uniform q;  
     b :: nat \<leftarrow> sample_uniform q;
@@ -731,48 +847,70 @@ proof-
     let e1 = (y + (q - b)) mod q;
     let s1 = (x*((y + (q - b)) mod q) + (q - r)) mod q;
     let d1 = (x*e1 + (q - s1)) mod q;
-    return_spmf ((x, c1, d1, e1), s1, (x*y + (q - s1)) mod q)}"
-      by(simp add: Let_def assms s1_s2_P1  r_P2 cong: bind_spmf_cong_simp)
+    let s2 = (x*y + (q - s1)) mod q;
+    let outputs = [s1, s2];
+    return_spmf (x, (c1, d1, e1), outputs)}"
+      apply(simp add: Let_def)
+      apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp)+
+      apply auto
+      using x_lt_q y_lt_q mod_less_divisor q_gt_0 s1 apply blast
+      using s1_s2 x_lt_q y_lt_q by blast
     also have "... = do {
     a :: nat \<leftarrow> sample_uniform q;  
-    b :: nat \<leftarrow> sample_uniform q;
+    b :: nat \<leftarrow> sample_uniform q;    
     let c1 = a;
     let c2 = b;
     let e1 = (y + (q - b)) mod q;
     s1 \<leftarrow> map_spmf (\<lambda> r. (x*((y + (q - b)) mod q) + (q - r)) mod q) (sample_uniform q);
     let d1 = (x*e1 + (q - s1)) mod q;
-    return_spmf ((x, c1, d1, e1), s1, (x*y + (q - s1)) mod q)}"
+    let s2 = (x*y + (q - s1)) mod q;
+    let outputs = [s1, s2];
+    return_spmf (x, (c1, d1, e1), outputs)}"
       by(simp add: bind_map_spmf Let_def o_def)
     also have "... = do {
     a :: nat \<leftarrow> sample_uniform q;  
-    b :: nat \<leftarrow> sample_uniform q;
+    b :: nat \<leftarrow> sample_uniform q;    
     let c1 = a;
     let c2 = b;
     let e1 = (y + (q - b)) mod q;
     s1 \<leftarrow> sample_uniform q;
     let d1 = (x*e1 + (q - s1)) mod q;
-    return_spmf ((x, c1, d1, e1), s1, (x*y + (q - s1)) mod q)}"
+    let s2 = (x*y + (q - s1)) mod q;
+    let outputs = [s1, s2];
+    return_spmf (x, (c1, d1, e1), outputs)}"
       by(simp add: samp_uni_minus_one_time_pad)
     also have "... = do {
-    a :: nat \<leftarrow> sample_uniform q;  
+    a :: nat \<leftarrow> sample_uniform q;   
     let c1 = a;
-    e1 \<leftarrow> map_spmf (\<lambda>b. (y + (q - b)) mod q) (sample_uniform q);
+    e1 \<leftarrow> map_spmf (\<lambda> b. (y + (q - b)) mod q) (sample_uniform q);
     s1 \<leftarrow> sample_uniform q;
     let d1 = (x*e1 + (q - s1)) mod q;
-    return_spmf ((x, c1, d1, e1), s1, (x*y + (q - s1)) mod q)}"
+    let s2 = (x*y + (q - s1)) mod q;
+    let outputs = [s1, s2];
+    return_spmf (x, (c1, d1, e1), outputs)}"
       by(simp add: bind_map_spmf Let_def o_def)
     also have "... = do {
-    a :: nat \<leftarrow> sample_uniform q;  
+    a :: nat \<leftarrow> sample_uniform q;   
     let c1 = a;
     e1 \<leftarrow> sample_uniform q;
     s1 \<leftarrow> sample_uniform q;
     let d1 = (x*e1 + (q - s1)) mod q;
-    return_spmf ((x, c1, d1, e1), s1, (x*y + (q - s1)) mod q)}"      
+    let s2 = (x*y + (q - s1)) mod q;
+    let outputs = [s1, s2];
+    return_spmf (x, (c1, d1, e1), outputs)}"
       by(simp add: samp_uni_minus_one_time_pad)
-    ultimately show ?thesis by(simp add: funct_def sim_non_det_def.Ideal1_def Let_def R1_def TI_def Out1_def S1_def)
-  qed
-  thus ?thesis by(simp add: sim_non_det_def.perfect_sec_P1_def)
+    also have "... = do {
+    outputs \<leftarrow> funct [x, y];
+    view \<leftarrow> S1 x (nth outputs 0);
+    return_spmf (x, view, outputs)}"
+    including monad_normalisation
+    by(simp add: S1_def)
+  ultimately show ?thesis by(simp add: party1.ideal_view_def)
 qed
+
+theorem party1_perfect_security:
+  shows "party1.perfect_security [x,y]"
+  unfolding party1.perfect_security_def using party1_equal_views by auto
 
 end
 
@@ -785,14 +923,13 @@ sublocale secure_mult "q n" for n
   using secure_mult_asymp_axioms secure_mult_asymp_def by blast
 
 theorem P1_secure:
-  assumes "x < q n" "y < q n"
-  shows "sim_non_det_def.perfect_sec_P1 n x y"
-  by (metis P1_security assms)
+  shows "party1.perfect_security n [x, y]"
+  by (rule party1_perfect_security)
 
 theorem P2_secure:
   assumes "x < q n" "y < q n"
-  shows "sim_non_det_def.perfect_sec_P2 n x y"
-  by (metis P2_security assms)
+  shows "party2.perfect_security n [x, y]" 
+  by(rule party2_perfect_security)
 
 end 
 

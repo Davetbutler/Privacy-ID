@@ -14,9 +14,9 @@ begin
 fun valid_bool_inputs_ot12 :: "bool inputs_ot12 list \<Rightarrow> bool"
   where "valid_bool_inputs_ot12 [M2 (b0, b1), C1 \<sigma>] = True" 
 
-type_synonym 'range viewP1 = "(bool inputs_ot12 \<times> 'range \<times> 'range) spmf"
+type_synonym 'range viewP1 = "('range \<times> 'range) spmf"
 type_synonym 'range dist1 = "(bool inputs_ot12 \<times> 'range \<times> 'range) \<Rightarrow> bool spmf"
-type_synonym 'index viewP2 = "(bool inputs_ot12 \<times> 'index \<times> (bool \<times> bool)) spmf"
+type_synonym 'index viewP2 = "('index \<times> (bool \<times> bool)) spmf"
 type_synonym 'index dist2 = "(bool inputs_ot12 \<times> 'index \<times> bool \<times> bool) \<Rightarrow> bool spmf"
 type_synonym ('index, 'range) advP2 = "'index dist2 \<Rightarrow> 'index \<Rightarrow> bool inputs_ot12 \<Rightarrow> bool outputs_ot12 \<Rightarrow> 'range \<Rightarrow> bool spmf"
 
@@ -55,13 +55,15 @@ fun protocol :: "bool inputs_ot12 list \<Rightarrow> (bool outputs_ot12 list) sp
     let (\<beta>\<^sub>\<sigma>' :: bool) = xor (B \<alpha> x\<^sub>\<sigma>') b\<^sub>\<sigma>';
     return_spmf ([U_ot12 (), if \<sigma> then (P_ot12 (xor (B \<alpha> x\<^sub>\<sigma>') \<beta>\<^sub>\<sigma>')) else (P_ot12 (xor (B \<alpha> x\<^sub>\<sigma>) \<beta>\<^sub>\<sigma>))])}"
 
-lemma correctness: "protocol [M2 (m0,m1), C1 c] = f_ot12 [M2 (m0,m1), C1 c]"
+lemma correctness: "protocol [M2 (m0,m1), C1 c] = return_spmf (f_ot12 [M2 (m0,m1), C1 c])"
 proof-
   have "(B \<alpha> (F\<^sub>i\<^sub>n\<^sub>v \<alpha> \<tau> y\<^sub>\<sigma>') = (B \<alpha> (F\<^sub>i\<^sub>n\<^sub>v \<alpha> \<tau> y\<^sub>\<sigma>') = m1)) = m1" 
     for \<alpha> \<tau> y\<^sub>\<sigma>'  by auto
   then show ?thesis 
     by(auto simp add: Let_def etp.B_F_inv_rewrite bind_spmf_const etp.lossless_S local.etp.lossless_I lossless_weight_spmfD split_def cong: bind_spmf_cong)
 qed
+
+sublocale ot12_correct: semi_honest_det_correctness f_ot12 protocol valid_bool_inputs_ot12 .
 
 text \<open> Party 1 views \<close>
 
@@ -71,7 +73,7 @@ fun R1 :: "bool inputs_ot12 list \<Rightarrow> 'range viewP1"
     x\<^sub>\<sigma> \<leftarrow> etp.S \<alpha>;
     y\<^sub>\<sigma>' \<leftarrow> etp.S \<alpha>;
     let y\<^sub>\<sigma> = F \<alpha> x\<^sub>\<sigma>;
-    return_spmf (M2 (b\<^sub>0, b\<^sub>1), if \<sigma> then y\<^sub>\<sigma>' else y\<^sub>\<sigma>, if \<sigma> then y\<^sub>\<sigma> else y\<^sub>\<sigma>')}"
+    return_spmf (if \<sigma> then y\<^sub>\<sigma>' else y\<^sub>\<sigma>, if \<sigma> then y\<^sub>\<sigma> else y\<^sub>\<sigma>')}"
 
 lemma lossless_R1: "lossless_spmf (R1 [M2 (b\<^sub>0, b\<^sub>1), C1 \<sigma>])"
   by(simp add: local.etp.lossless_I split_def etp.lossless_S Let_def)
@@ -81,7 +83,7 @@ fun S1 :: "bool inputs_ot12 \<Rightarrow> bool outputs_ot12 \<Rightarrow> 'range
     (\<alpha>, \<tau>) \<leftarrow> I;
     y\<^sub>0 :: 'range \<leftarrow> etp.S \<alpha>;
     y\<^sub>1 \<leftarrow> etp.S \<alpha>;
-    return_spmf (M2 (b\<^sub>0, b\<^sub>1), y\<^sub>0, y\<^sub>1)}" 
+    return_spmf (y\<^sub>0, y\<^sub>1)}" 
 
 lemma lossless_S1: "lossless_spmf (S1 (M2 (b\<^sub>0, b\<^sub>1)) (U_ot12 ()))"
   by(simp add: local.etp.lossless_I split_def etp.lossless_S)
@@ -98,7 +100,7 @@ fun R2 :: "bool inputs_ot12 list \<Rightarrow> 'index viewP2"
     let x\<^sub>\<sigma>' = F\<^sub>i\<^sub>n\<^sub>v \<alpha> \<tau> y\<^sub>\<sigma>';
     let \<beta>\<^sub>\<sigma> = (B \<alpha> x\<^sub>\<sigma>) \<oplus> (if \<sigma> then b1 else b0);
     let \<beta>\<^sub>\<sigma>' = (B \<alpha> x\<^sub>\<sigma>') \<oplus> (if \<sigma> then b0 else b1);
-    return_spmf (C1 \<sigma>, \<alpha>,(\<beta>\<^sub>\<sigma>, \<beta>\<^sub>\<sigma>'))}"
+    return_spmf (\<alpha>,(\<beta>\<^sub>\<sigma>, \<beta>\<^sub>\<sigma>'))}"
 
 lemma lossless_R2: "lossless_spmf (R2 [M2 (b0, b1), C1 \<sigma>])"
   by(simp add: Let_def split_def local.etp.lossless_I etp.lossless_S)
@@ -111,7 +113,7 @@ fun S2 :: "bool inputs_ot12 \<Rightarrow> bool outputs_ot12 \<Rightarrow> 'index
     let x\<^sub>\<sigma>' = F\<^sub>i\<^sub>n\<^sub>v \<alpha> \<tau> y\<^sub>\<sigma>';
     let \<beta>\<^sub>\<sigma> = (B \<alpha> x\<^sub>\<sigma>) \<oplus> b\<^sub>\<sigma>;
     let \<beta>\<^sub>\<sigma>' = B \<alpha> x\<^sub>\<sigma>';
-    return_spmf (C1 \<sigma>, \<alpha>, (\<beta>\<^sub>\<sigma>, \<beta>\<^sub>\<sigma>'))}"
+    return_spmf (\<alpha>, (\<beta>\<^sub>\<sigma>, \<beta>\<^sub>\<sigma>'))}"
 
 lemma lossless_S2: "lossless_spmf (S2 (C1 \<sigma>) (P_ot12 b\<^sub>\<sigma>))"
   by(simp add: local.etp.lossless_I etp.lossless_S split_def)
@@ -120,22 +122,24 @@ text \<open> Security for Party 1 \<close>
 
 text\<open>We have information theoretic security for Party 1.\<close>
 
-lemma P1_security: "R1 [M2 (b0, b1), C1 \<sigma>] = f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda> outputs_ot12. S1 (nth [M2 (b0, b1), C1 \<sigma>] 0) (nth outputs_ot12 0))" 
+lemma P1_security: 
+  shows "R1 [M2 (b0, b1), C1 \<sigma>] = return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) \<bind> (\<lambda> outputs_ot12. S1 (nth [M2 (b0, b1), C1 \<sigma>] 0) (nth outputs_ot12 0))" 
   including monad_normalisation
 proof-
   have "R1 [M2(b0, b1), C1 \<sigma>] =  do {
     (\<alpha>, \<tau>) \<leftarrow> I;
     y\<^sub>\<sigma>' :: 'range \<leftarrow> etp.S \<alpha>;
     y\<^sub>\<sigma> \<leftarrow> map_spmf (\<lambda> x\<^sub>\<sigma>. F \<alpha> x\<^sub>\<sigma>) (etp.S \<alpha>);
-    return_spmf (M2 (b0,b1), if \<sigma> then y\<^sub>\<sigma>' else y\<^sub>\<sigma>, if \<sigma> then y\<^sub>\<sigma> else y\<^sub>\<sigma>')}"
+    return_spmf (if \<sigma> then y\<^sub>\<sigma>' else y\<^sub>\<sigma>, if \<sigma> then y\<^sub>\<sigma> else y\<^sub>\<sigma>')}"
     by(simp add: bind_map_spmf o_def Let_def)
   also have "... = do {
     (\<alpha>, \<tau>) \<leftarrow> I;
     y\<^sub>\<sigma>' :: 'range \<leftarrow> etp.S \<alpha>;
     y\<^sub>\<sigma> \<leftarrow> etp.S \<alpha>;
-    return_spmf (M2 (b0,b1), if \<sigma> then y\<^sub>\<sigma>' else y\<^sub>\<sigma>, if \<sigma> then y\<^sub>\<sigma> else y\<^sub>\<sigma>')}"
+    return_spmf (if \<sigma> then y\<^sub>\<sigma>' else y\<^sub>\<sigma>, if \<sigma> then y\<^sub>\<sigma> else y\<^sub>\<sigma>')}"
     by(simp add: etp.uni_set_samp Let_def split_def cong: bind_spmf_cong)
-  also have "... = f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda> outputs_ot12 :: bool outputs_ot12 list. S1 (M2 (b0,b1)) (U_ot12 (() :: unit)))"
+  also have "... = return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) 
+                    \<bind> (\<lambda> outputs_ot12 :: bool outputs_ot12 list. S1 (M2 (b0,b1)) (U_ot12 (() :: unit)))"
     by(cases \<sigma>; simp add: Let_def) 
   ultimately show ?thesis by auto
 qed 
@@ -152,7 +156,7 @@ fun \<A> :: "('index, 'range) advP2"
 
 lemma assm_bound_f_ot12: 
   assumes "etp.HCP_adv \<A> (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0)) D \<le> HCP_ad"
-  shows "\<bar>spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda> outputs_ot12. 
+  shows "\<bar>spmf (return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) \<bind> (\<lambda> outputs_ot12. 
               etp.HCP_game \<A> (C1 \<sigma>) (nth outputs_ot12 1) D)) True - 1/2\<bar> \<le> HCP_ad"
 (is "?lhs \<le> HCP_ad")
 proof-
@@ -165,9 +169,9 @@ qed
 
 lemma assm_bound_f_ot12_collapse: 
   assumes "\<forall> b\<^sub>\<sigma>. etp.HCP_adv \<A> (C1 \<sigma>) (P_ot12 b\<^sub>\<sigma>) D \<le> HCP_ad"
-  shows "\<bar>spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda> outputs_ot12. etp.HCP_game \<A> (C1 \<sigma>) (nth outputs_ot12 1) D)) True - 1/2\<bar> \<le> HCP_ad"
+  shows "\<bar>spmf (return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) \<bind> (\<lambda> outputs_ot12. etp.HCP_game \<A> (C1 \<sigma>) (nth outputs_ot12 1) D)) True - 1/2\<bar> \<le> HCP_ad"
 proof -
-  have "\<bar>spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda>zs. local.etp.HCP_game \<A> (C1 \<sigma>) (zs ! 1) D)) True - 1 / 2\<bar> \<le> HCP_ad \<or> local.etp.HCP_adv \<A> (C1 \<sigma>) (if \<sigma> then P_ot12 b1 else P_ot12 b0) D \<le> HCP_ad"
+  have "\<bar>spmf (return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) \<bind> (\<lambda>zs. local.etp.HCP_game \<A> (C1 \<sigma>) (zs ! 1) D)) True - 1 / 2\<bar> \<le> HCP_ad \<or> local.etp.HCP_adv \<A> (C1 \<sigma>) (if \<sigma> then P_ot12 b1 else P_ot12 b0) D \<le> HCP_ad"
     using assms by presburger
   then show ?thesis
     using assm_bound_f_ot12 by blast
@@ -175,31 +179,34 @@ qed
 
 text \<open> To prove security for party 2 we split the proof on the cases on party 2's input \<close>
 
+sublocale ot12_party2: semi_honest_det_security f_ot12 protocol valid_bool_inputs_ot12 1 R2 S2 .
+
 lemma R2_S2_False:
   assumes "((if \<sigma> then b0 else b1) = False)" 
-  shows "spmf (R2 [M2 (b0, b1), C1 \<sigma>] \<bind> (D2::(bool inputs_ot12 \<times> 'index \<times> (bool \<times> bool)) \<Rightarrow> bool spmf)) True 
-                = spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda> outputs_ot12. S2 (C1 \<sigma>) (nth outputs_ot12 1) \<bind> D2)) True"
+  shows "spmf (ot12_party2.real_view [M2 (b0, b1), C1 \<sigma>] \<bind> (D2::(bool inputs_ot12 \<times> 'index \<times> (bool \<times> bool)) \<Rightarrow> bool spmf)) True 
+                = spmf (return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) \<bind> (\<lambda> outputs_ot12. ot12_party2.ideal_view (C1 \<sigma>) (nth outputs_ot12 1) \<bind> D2)) True"
 proof-
   have "\<sigma> \<Longrightarrow> \<not> b0" using assms by simp
   moreover have "\<not> \<sigma> \<Longrightarrow> \<not> b1" using assms by simp
   ultimately show ?thesis
+    unfolding ot12_party2.real_view_def ot12_party2.ideal_view_def
     by(auto simp add: split_def local.etp.F_f_inv assms cong: bind_spmf_cong_simp) 
 qed
 
 lemma R2_S2_True:
   assumes "((if \<sigma> then b0 else b1) = True)" 
     and lossless_D2: "\<forall> view. lossless_spmf (D2 view)"
-  shows "\<bar>(spmf (bind_spmf (R2 [M2 (b0, b1), C1 \<sigma>]) (D2::(bool inputs_ot12 \<times> 'index \<times> (bool \<times> bool)) \<Rightarrow> bool spmf)) True) 
-                - spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda>outputs. S2 (C1 \<sigma>) (nth outputs 1) \<bind> (\<lambda> view. D2 view))) True\<bar>
+  shows "\<bar>(spmf (bind_spmf (ot12_party2.real_view [M2 (b0, b1), C1 \<sigma>]) (D2::(bool inputs_ot12 \<times> 'index \<times> (bool \<times> bool)) \<Rightarrow> bool spmf)) True) 
+                - spmf (return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) \<bind> (\<lambda>outputs. ot12_party2.ideal_view (C1 \<sigma>) (nth outputs 1) \<bind> (\<lambda> view. D2 view))) True\<bar>
                          = \<bar>2*((spmf (etp.HCP_game \<A> (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0)) D2) True) - 1/2)\<bar>"
 proof-
-  have  "(spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda> outputs_ot12. S2 (C1 \<sigma>) (nth outputs_ot12 1) \<bind> D2)) True
-              - spmf (bind_spmf (R2 [M2 (b0, b1), C1 \<sigma>]) D2) True) 
+  have  "(spmf (return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) \<bind> (\<lambda> outputs_ot12. ot12_party2.ideal_view (C1 \<sigma>) (nth outputs_ot12 1) \<bind> D2)) True
+              - spmf (bind_spmf (ot12_party2.real_view [M2 (b0, b1), C1 \<sigma>]) D2) True) 
                     = 2 * ((spmf (etp.HCP_game \<A> (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0)) D2) True) - 1/2)"
   proof-
     have  "((spmf (etp.HCP_game \<A> (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0)) D2) True) - 1/2)  = 
-                  1/2*(spmf (bind_spmf (S2 (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0))) D2) True
-                        - spmf (bind_spmf (R2 [M2 (b0, b1), C1 \<sigma>]) D2) True)"
+                  1/2*(spmf (bind_spmf (ot12_party2.ideal_view (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0))) D2) True
+                        - spmf (bind_spmf (ot12_party2.real_view [M2 (b0, b1), C1 \<sigma>]) D2) True)"
       including monad_normalisation
     proof- 
       have \<sigma>_true_b0_true: "\<sigma> \<Longrightarrow> b0 = True" using assms(1) by simp
@@ -334,7 +341,8 @@ proof-
         apply(auto  simp add: local.etp.F_f_inv S2D_def R2D_def D_true_def D_false_def  assms split_def cong: bind_spmf_cong_simp)
          apply(simp add: \<sigma>_true_b0_true)
         by(simp add: \<sigma>_false_b1_true)
-      ultimately show ?thesis by(simp add: S2D_def R2D_def split_def)
+      ultimately show ?thesis unfolding  ot12_party2.ideal_view_def ot12_party2.real_view_def 
+        by(auto simp add:  S2D_def R2D_def split_def)
     qed
     then show ?thesis by auto 
   qed
@@ -343,21 +351,16 @@ qed
 
 lemma P2_adv_bound_unfold:
   assumes lossless_D2: "\<forall> view. lossless_spmf (D2 view)"
-  shows "\<bar>(spmf (bind_spmf (R2 [M2 (b0, b1), C1 \<sigma>]) D2) True) - spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda> outputs_ot12. S2 (C1 \<sigma>) (nth outputs_ot12 1) \<bind> (\<lambda> view. D2 view))) True\<bar>
+  shows "\<bar>(spmf (bind_spmf (ot12_party2.real_view [M2 (b0, b1), C1 \<sigma>]) D2) True) - spmf (return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) \<bind> (\<lambda> outputs_ot12. ot12_party2.ideal_view (C1 \<sigma>) (nth outputs_ot12 1) \<bind> (\<lambda> view. D2 view))) True\<bar>
                          \<le> \<bar>2*((spmf (etp.HCP_game \<A> (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0)) D2) True) - 1/2)\<bar>"
-  apply(cases "(if \<sigma> then (b0) else (b1))")
-   apply(auto simp only: split_def R2_S2_False) 
-  using R2_S2_True assms by simp
+  apply(cases "(if \<sigma> then (b0) else (b1))") 
+  using R2_S2_True R2_S2_False assms by auto 
 
-sublocale ot12_correct: semi_honest_det_correctness f_ot12 protocol valid_bool_inputs_ot12 .
-
-sublocale ot12_party1: semi_honest_det_security protocol f_ot12 valid_bool_inputs_ot12 0 R1 S1 .
+sublocale ot12_party1: semi_honest_det_security f_ot12 protocol valid_bool_inputs_ot12 0 R1 S1 .
 
 lemma perfect_security_P1: "ot12_party1.perfect_security [M2 (b0, b1), C1 \<sigma>]" 
-  unfolding ot12_party1.perfect_security_def 
-  using P1_security  by(auto simp add: P1_security Let_def) 
-
-sublocale ot12_party2: semi_honest_det_security protocol f_ot12 valid_bool_inputs_ot12 1 R2 S2 .
+  unfolding ot12_party1.perfect_security_def ot12_party1.real_view_def ot12_party1.ideal_view_def
+  using P1_security by(auto simp add: P1_security Let_def) 
 
 lemma correct: "ot12_correct.correctness [M2 (b0, b1), C1 \<sigma>]"
   unfolding ot12_correct.correctness_def  
@@ -365,7 +368,8 @@ lemma correct: "ot12_correct.correctness [M2 (b0, b1), C1 \<sigma>]"
 
 lemma P2_adv_bound:
   assumes lossless_D2: "\<forall> view. lossless_spmf (D2 view)"
-  shows "ot12_party2.advantage [M2 (b0, b1), C1 \<sigma>] D2 \<le> \<bar>2*((spmf (etp.HCP_game \<A> (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0)) D2) True) - 1/2)\<bar>"
+  shows "ot12_party2.advantage [M2 (b0, b1), C1 \<sigma>] D2 
+            \<le> \<bar>2*((spmf (etp.HCP_game \<A> (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0)) D2) True) - 1/2)\<bar>"
   using P2_adv_bound_unfold assms unfolding ot12_party2.advantage_def 
   by(auto simp add: split_def)
 
@@ -374,12 +378,12 @@ lemma P2_security:
     and lossless_D2: "\<forall> view. lossless_spmf (D2 view)"
   shows "ot12_party2.advantage [M2 (b0, b1), C1 \<sigma>] D2 \<le> 2 * HCP_ad"
 proof-
-  have *: "\<bar>2 * (spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda> outputs_ot12. etp.HCP_game \<A> (C1 \<sigma>) (nth outputs_ot12 1) D2)) True - 1/2)\<bar> 
+  have *: "\<bar>2 * (spmf (return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) \<bind> (\<lambda> outputs_ot12. etp.HCP_game \<A> (C1 \<sigma>) (nth outputs_ot12 1) D2)) True - 1/2)\<bar> 
                 = \<bar>2 * (spmf (etp.HCP_game \<A> (C1 \<sigma>) (if \<sigma> then (P_ot12 b1) else (P_ot12 b0)) D2) True - 1/2)\<bar>"
     by simp
-  hence "ot12_party2.advantage [M2 (b0, b1), C1 \<sigma>] D2 \<le> \<bar>2*((spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda> outputs_ot12. etp.HCP_game \<A> (C1 \<sigma>) (nth outputs_ot12 1) D2)) True) - 1/2)\<bar>"
+  hence "ot12_party2.advantage [M2 (b0, b1), C1 \<sigma>] D2 \<le> \<bar>2*((spmf (return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) \<bind> (\<lambda> outputs_ot12. etp.HCP_game \<A> (C1 \<sigma>) (nth outputs_ot12 1) D2)) True) - 1/2)\<bar>"
     using P2_adv_bound assms by auto
-  moreover with * have "\<bar>2*((spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>] \<bind> (\<lambda> outputs_ot12. etp.HCP_game \<A> (C1 \<sigma>) (nth outputs_ot12 1) D2)) True) - 1/2)\<bar> \<le> \<bar>2*HCP_ad\<bar>" 
+  moreover with * have "\<bar>2*((spmf (return_spmf (f_ot12 [M2 (b0, b1), C1 \<sigma>]) \<bind> (\<lambda> outputs_ot12. etp.HCP_game \<A> (C1 \<sigma>) (nth outputs_ot12 1) D2)) True) - 1/2)\<bar> \<le> \<bar>2*HCP_ad\<bar>" 
     using assms 
     by (simp add: local.etp.HCP_adv_def)+
   moreover have "HCP_ad \<ge> 0" 

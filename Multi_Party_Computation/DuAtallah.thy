@@ -5,21 +5,14 @@ theory DuAtallah imports
   Semi_Honest
   Uniform_Sampling
 begin
-sledgehammer_params[timeout = 1000]
+
 locale du_atallah_base =
   fixes q :: nat
   assumes q_gt_0 [simp]: "q > 0"
     and prime_q: "prime q"
 begin
 
-(*definition funct_set :: "nat \<Rightarrow> nat \<Rightarrow> (nat \<times> nat \<times> nat) set"
-  where "funct_set a b = {(s_a,s_b,s_c). (s_a + s_b + s_c) mod q = (a * b) mod q}"
-
-fun funct :: "nat list \<Rightarrow> (nat list) spmf"
-  where 
-   "funct [a,b] = do {
-       (s_a,s_b,s_c) \<leftarrow> spmf_of_set (funct_set a b);
-       return_spmf [s_a,s_b,s_c]}"*)
+fun valid_inputs where "valid_inputs [a,b] \<longleftrightarrow> (a < q \<and> b < q)"
 
 fun reconstruct :: "nat list \<Rightarrow> nat spmf"
   where "reconstruct [s_a,s_b,s_c] = return_spmf ((s_a + s_b + s_c) mod q)"
@@ -34,6 +27,39 @@ fun funct :: "nat list \<Rightarrow> (nat list) spmf"
       let s_c = (a1 * a2) mod q;
       return_spmf [s_a,s_b,s_c]}"
 
+lemma 
+  assumes "msg1 = (b + a2) mod q" and "b < q" and "a < q" and "a2 < q"
+  shows "a2 = (msg1 + q - b) mod q"
+proof-
+  have "[msg1 + q = b + a2] (mod q)" 
+    using assms cong_def by force
+  hence "[msg1 + q - b = a2] (mod q)"
+  proof-
+    have "msg1 + q - b > 0" 
+      using assms(2) by linarith
+    thus ?thesis 
+      by (metis \<open>[msg1 + q = b + a2] (mod q)\<close> assms(2) cong_add_lcancel_nat le_add_diff_inverse le_less trans_le_add2)
+  qed
+  thus ?thesis  
+    by(metis mod_if assms(4) cong_def)
+qed
+
+fun R1 :: "nat list \<Rightarrow> (nat \<times> nat \<times> nat) spmf"
+  where "R1 [a,b] = do {
+    a1 \<leftarrow> sample_uniform_units q;
+    a2 \<leftarrow> sample_uniform q;
+    let msg1 = (b + a2) mod q;
+    return_spmf (a, a1, msg1)}"
+
+fun outputs1 :: "nat list \<Rightarrow> (nat \<times> nat \<times> nat) \<Rightarrow> (nat list) spmf"
+  where "outputs1 [a,b] view = do {
+    let (a, a1, msg1) = view;
+    let s_a = (q - (a1 * msg1) mod q) mod q;
+    let s_b = (b * (a + a1)) mod q;
+    let s_c = (a1 * ((msg1 + q - b) mod q)) mod q; 
+    let outputs = [s_a,s_b,s_c];
+    return_spmf outputs}"  
+
 fun protocol :: "nat list \<Rightarrow> (nat list) spmf"
   where 
     "protocol [a,b] = do {
@@ -43,6 +69,93 @@ fun protocol :: "nat list \<Rightarrow> (nat list) spmf"
       let s_b = (b * (a + a1)) mod q;
       let s_c = (a1 * a2) mod q;
       return_spmf [s_a,s_b,s_c]}"
+
+sublocale party1: semi_honest_prob 0 funct outputs1 R1 S1 valid_inputs .
+
+lemma R1_s_a_rewrite:
+  assumes "s_a = (q - (a1 * (b + a2)) mod q) mod q" and "a1 < q" and "b < q" and "a2 < q" and "a1 \<noteq> 0"
+  shows "(b + a2) mod q = nat (q - (s_a * fst (bezw a1 q)) mod q) mod q"
+proof-
+  have gcd: "gcd a1 q = 1" 
+    using assms prime_field prime_q by presburger
+  have "[s_a = q - (a1 * (b + a2)) mod q] (mod q)" using assms(1) cong_def by force
+  hence "[int s_a = int q - (int a1 * (int b + int a2)) mod q] (mod q)" 
+    by (metis (full_types) cong_int_iff int_ops(7) int_ops(9) mod_le_divisor of_nat_add of_nat_diff q_gt_0)
+  hence "[int s_a = - (int a1 * (int b + int a2))] (mod q)" 
+    by (metis ab_group_add_class.ab_diff_conv_add_uminus cong_mod_right mod_add_self1 mod_minus_eq)
+  hence "[int s_a * fst (bezw a1 q) = - (int a1 * (int b + int a2) * fst (bezw a1 q))] (mod q)" 
+    using cong_scalar_right by fastforce
+  hence "[int s_a * fst (bezw a1 q) = - ((int a1 * fst (bezw a1 q)) * (int b + int a2))] (mod q)" 
+    by (simp add: Groups.mult_ac(2) Groups.mult_ac(3))
+  hence "[int s_a * fst (bezw a1 q) = - (1 * (int b + int a2))] (mod q)"  
+    by (meson cong_minus_minus_iff cong_scalar_right cong_trans q_gt_0 gcd inverse)
+  hence "[- (int s_a * fst (bezw a1 q)) = int b + int a2] (mod q)" 
+    using cong_minus_minus_iff by fastforce
+  hence "[q - (int s_a * fst (bezw a1 q)) mod q = int b + int a2] (mod q)" 
+    by (simp add: cong_def mod_minus_eq)
+  hence "(b + a2) mod q = (q - (int s_a * fst (bezw a1 q)) mod q) mod q"
+    by (simp add: cong_def int_ops(9))
+  thus ?thesis  
+    by (smt Euclidean_Division.pos_mod_bound nat_int nat_mod_distrib of_nat_0_less_iff q_gt_0)
+qed
+
+notepad 
+begin
+  fix a b
+  assume "valid_inputs [a,b]"
+  hence a: "a < q" and b: "b < q" by auto
+  have "party1.real_view [a,b] = do {
+    a1 \<leftarrow> sample_uniform_units q;
+    a2 \<leftarrow> sample_uniform q;
+    let msg1 = (b + a2) mod q;
+    let view = (a, a1, msg1);
+    let s_a = (q - (a1 * (b + a2)) mod q) mod q;
+    let s_b = (b * (a + a1)) mod q;
+    let s_c = (a1 * (((b + a2) + q - b) mod q)) mod q; 
+    let outputs = [s_a,s_b,s_c];
+    return_spmf (view, outputs)}"
+    apply(simp add: party1.real_view_def Let_def)
+    apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp)+ 
+    using a b   apply auto
+    apply (simp add: mod_mult_right_eq)
+  proof -
+    fix x :: nat and xa :: nat
+    assume a1: "b < q"
+    assume a2: "xa < q"
+    have f3: "\<forall>n. q + n - b = q - b + n"
+      using a1 by (metis Nat.add_diff_assoc2 mod_if mod_le_divisor q_gt_0)
+    have "\<not> q < b"
+      using a1 by linarith
+    then show "x * (((b + xa) mod q + q - b) mod q) mod q = x * xa mod q"
+      using f3 a2 by (metis Groups.add_ac(2) Groups.add_ac(3) add_diff_inverse_nat mod_add_right_eq mod_add_self1 mod_if)
+  qed
+  also have "... = do {
+    a1 \<leftarrow> sample_uniform_units q;
+    a2 \<leftarrow> sample_uniform q;
+    let s_a = (q - (a1 * (b + a2)) mod q) mod q;
+    let s_b = (b * (a + a1)) mod q;
+    let s_c = (a1 * (((b + a2) + q - b) mod q)) mod q; 
+    let msg1 = nat (q - (s_a * fst (bezw a1 q)) mod q) mod q;
+    let view = (a, a1, msg1);
+    let outputs = [s_a,s_b,s_c];
+    return_spmf (view, outputs)}"
+    apply(simp add: Let_def)
+    apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp)+ 
+    using a b R1_s_a_rewrite 
+    by blast
+  also have "... = do {
+    a1 \<leftarrow> sample_uniform_units q;
+    a2 \<leftarrow> sample_uniform q;
+    let s_a = (q - (a1 * (b + a2)) mod q) mod q;
+    let s_b = (b * (a + a1)) mod q;
+    let s_c = (a1 * (((b + a2) + q - b) mod q)) mod q; 
+    let msg1 = nat (q - (s_a * fst (bezw a1 q)) mod q) mod q;
+    let view = (a, a1, msg1);
+    let outputs = [s_a,s_b,s_c];
+    return_spmf (view, outputs)}"
+
+
+
 
 (*lemma correct_sum: 
   assumes "a < q" and "b < q" and "a1 < q" and "a2 < q" and "a \<noteq> 0" and "b \<noteq> 0"
@@ -137,26 +250,7 @@ lemma
   shows "funct [a,b] \<bind> (\<lambda> shares. reconstruct shares) = protocol [a,b] \<bind> (\<lambda> shares. reconstruct shares)"
   by auto
 
-(*Party 1 secruity*)
 
-definition "randomness_1 = do {
-          a1 :: nat \<leftarrow> sample_uniform_units q;
-          return_spmf (a1)}"
-
-fun real_view_msgs_1 :: "nat list \<Rightarrow> nat \<Rightarrow> (nat \<times> nat \<times> nat) spmf" 
-  where "real_view_msgs_1 [a,b,c] a1 = do {
-          a2 :: nat \<leftarrow> sample_uniform q;
-          let msg = (b + a2) mod q;
-          return_spmf (a, a1, msg)}"
-
-fun outputs_1 :: "nat list \<Rightarrow> (nat \<times> nat \<times> nat) \<Rightarrow> (nat list) spmf"
-  where "outputs_1 [a,b,c] view = do {
-          let (a, a1, msg) = view;
-          let a2 = (msg + (q - b)) mod q;
-          let s_a = (q - (a1 * (b + a2)) mod q) mod q;
-          let s_b = (b * (a + a1)) mod q;
-          let s_c = (a1 * a2) mod q;
-          return_spmf [s_a,s_b,s_c]}"
 
 lemma *:
   assumes "msg = (b + a2) mod q" and "b < q" and "a2 < q"
