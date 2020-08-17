@@ -38,14 +38,16 @@ lemma 11:
   shows "((wb + rd') mod q + (q - wb)) mod q = rd'"
   using assms 1 by blast
 
-
 text\<open>The overall functionality for bidding.\<close>
 
-fun funct_bid :: "nat list \<Rightarrow> ((nat \<times> bool) list) spmf"
+fun funct_bid :: "nat list \<Rightarrow> ((nat \<times> bool option) list)"
   where "funct_bid [s, b, d] = do {
-        _ :: unit \<leftarrow> assert_spmf (Max {b,d} \<ge> s);
-        let out = (Max {b,d}, (b \<ge> d));
-        return_spmf ([out, out, out])}"
+        let (winning_bid, winner) = (if s > Max {b,d} then (0,None) else (if b \<ge> Max {s,d} then (b, Some False) else (d,Some True)));
+        [(winning_bid, winner), (winning_bid, winner), (winning_bid, winner)]}"
+
+(*the following lemma shows the above satisfies the functionality in the paper*)
+lemma assumes "(s :: nat) > b" and "s > d" and "b \<ge> s" and "b \<ge> d"
+  shows "d \<ge> s" and "d > b" using assms by auto
 
 fun valid_inputs_f_bid :: "nat list \<Rightarrow> bool"
   where "valid_inputs_f_bid [s, b, d] = (s < q \<and> b < q \<and> d < q)"
@@ -58,14 +60,14 @@ lemma
 lemma b_wins:
   assumes b_ge_d: "b \<ge> d"
     and b_ge_s: "b \<ge> s"
-    and asm: "[(wb_s, w_s), (wb_b, w_b), (wb_d, w_d)] \<in> set_spmf (funct_bid [s, b, d])"
+    and asm: "[(wb_s, w_s), (wb_b, w_b), (wb_d, w_d)] = funct_bid [s, b, d]"
   shows "wb_s = b" "wb_d = b" "wb_b = b"
-  using assms by(auto simp add: Let_def max.absorb1) 
+  using assms by(auto simp add: Let_def max.absorb1)  
 
 lemma d_wins:
   assumes b_ge_d: "d > b"
     and b_ge_s: "d \<ge> s"
-    and asm: "[(wb_s, w_s), (wb_b, w_b), (wb_d, w_d)] \<in> set_spmf (funct_bid [s, b, d])"
+    and asm: "[(wb_s, w_s), (wb_b, w_b), (wb_d, w_d)] = funct_bid [s, b, d]"
   shows "wb_s = d" "wb_d = d" "wb_b = d"
   using assms by(auto simp add: Let_def max.absorb2)  
 
@@ -112,14 +114,14 @@ lemma b_lt_d_f_MPC1:
 
 datatype inputs_mpc2 = D_mpc2 "(bool \<times> nat)" | S_mpc2 "(nat \<times> bool \<times> nat)"
 
-fun f_MPC2 :: "inputs_mpc2 list \<Rightarrow> bool list spmf"
+fun f_MPC2 :: "inputs_mpc2 list \<Rightarrow> bool list"
   where "f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] = do {
     let out = (if (yb + (q - yd)) mod q \<ge> s then True else False);
-    return_spmf [out, out]}"
+    [out, out]}"
 
 lemma "f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] = do {
     let out = (if ((yb + (q - yd)) mod q \<ge> s) then True else False);
-    return_spmf [out, out]}"
+    [out, out]}"
   by auto
 
 fun valid_inputs_mpc2 :: "inputs_mpc2 list \<Rightarrow> bool"
@@ -131,11 +133,11 @@ locale bidding_prot = bidding_prot_base
   +  mpc1_1: semi_honest_prob 0 f_MPC1 outputs_mpc1 mpc1_view_1 S1_MPC1 valid_inputs_mpc1
   +  mpc1_2: semi_honest_prob 1 f_MPC1 outputs_mpc2 mpc1_view_2 S2_MPC1 valid_inputs_mpc1 
   + mpc2: semi_honest_det_correctness f_MPC2 protocol_MPC2 valid_inputs_mpc2
-  + mpc2_1: semi_honest_det_security protocol_MPC2 f_MPC2 valid_inputs_mpc2 0 R1_MPC2 S1_MPC2  
-  + mpc2_2: semi_honest_det_security protocol_MPC2 f_MPC2 valid_inputs_mpc2 1 R2_MPC2 S2_MPC2 
+  + mpc2_1: semi_honest_det_security f_MPC2 protocol_MPC2 valid_inputs_mpc2 0 R1_MPC2 S1_MPC2  
+  + mpc2_2: semi_honest_det_security f_MPC2 protocol_MPC2 valid_inputs_mpc2 1 R2_MPC2 S2_MPC2 
   + ot12: semi_honest_det_correctness f_ot12 protocol_OT12 valid_inputs_ot12
-  + ot12_1: semi_honest_det_security protocol_OT12 f_ot12 valid_inputs_ot12 0 R1_OT12_1 S1_OT12_1 
-  + ot12_2: semi_honest_det_security protocol_OT12 f_ot12 valid_inputs_ot12 1 R2_OT12_1 S2_OT12_1 
+  + ot12_1: semi_honest_det_security f_ot12 protocol_OT12 valid_inputs_ot12 0 R1_OT12_1 S1_OT12_1 
+  + ot12_2: semi_honest_det_security f_ot12 protocol_OT12 valid_inputs_ot12 1 R2_OT12_1 S2_OT12_1 
   for  "protocol_MPC1" 
     and "mpc1_view_1"
     and "S1_MPC1" 
@@ -170,36 +172,44 @@ lemma mpc1_sec_unfold:
   shows "mpc1_1.real_view [b, d] = mpc1_1.ideal_view [b, d]"
   using  MPC1_1 mpc1_1.perfect_security_def assms by simp
 
-lemma MPC2_correct_unfold: "\<forall> xd yd s xb yb. valid_inputs_mpc2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] \<longrightarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] = f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)]"
+lemma MPC2_correct_unfold: "\<forall> xd yd s xb yb. valid_inputs_mpc2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] 
+        \<longrightarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] = return_spmf (f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)])"
   using MPC2_correct[unfolded mpc2.correctness_def] by simp
 
 lemma OT12_1_1: 
   assumes "valid_inputs_ot12 [M2 (m0,m1), C1 \<sigma>]" 
-  shows "R1_OT12_1 [M2 (m0,m1), C1 \<sigma>] = f_ot12 [M2 (m0,m1), C1 \<sigma>] \<bind> (\<lambda> outputs. S1_OT12_1 (M2 (m0,m1)) (nth outputs 0))"
-  using OT12_sec_P1[unfolded ot12_1.perfect_security_def] assms by fastforce
+  shows "R1_OT12_1 [M2 (m0,m1), C1 \<sigma>] = return_spmf (f_ot12 [M2 (m0,m1), C1 \<sigma>]) \<bind> (\<lambda> outputs. S1_OT12_1 (M2 (m0,m1)) (nth outputs 0))"
+  using OT12_sec_P1[unfolded ot12_1.perfect_security_def ot12_1.real_view_def ot12_1.ideal_view_def, of "(m0,m1)" \<sigma>] assms ot12_1.perfect_sec_views_equal OT12_sec_P1 by auto 
 
 lemma OT12_2_1: 
   assumes "valid_inputs_ot12 [M2 (m0,m1), C1 \<sigma>]" 
-  shows "R2_OT12_1 [M2 (m0,m1), C1 \<sigma>] = f_ot12 [M2 (m0,m1), C1 \<sigma>] \<bind> (\<lambda> outputs. S2_OT12_1 (C1 \<sigma>) (nth outputs 1))"
-  using OT12_sec_P2[unfolded ot12_2.perfect_security_def] assms by(auto simp add: split_def)
+  shows "R2_OT12_1 [M2 (m0,m1), C1 \<sigma>] = return_spmf (f_ot12 [M2 (m0,m1), C1 \<sigma>]) \<bind> (\<lambda> outputs. S2_OT12_1 (C1 \<sigma>) (nth outputs 1))"
+  using OT12_sec_P2[unfolded ot12_2.perfect_security_def] ot12_2.perfect_sec_views_equal OT12_sec_P2 by auto
 
 lemma MPC2_1: 
   assumes "valid_inputs_mpc2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)]"
-  shows "R1_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] = f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] \<bind> (\<lambda> outputs. S1_MPC2 (D_mpc2 (xd,yd)) (nth outputs 0))"
-  using MPC2_sec_P1[unfolded mpc2_1.perfect_security_def] assms by simp
+  shows "R1_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] 
+            = return_spmf (f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)])  
+                \<bind> (\<lambda> outputs. S1_MPC2 (D_mpc2 (xd,yd)) (nth outputs 0))"
+  using MPC2_sec_P1[of xd yd s xb yb] assms mpc2_1.perfect_sec_views_equal[of "[D_mpc2 (xd, yd), S_mpc2 (s, xb, yb)]"] by auto
 
 lemma MPC2_2:
   assumes "valid_inputs_mpc2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)]"
-  shows "R2_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] = f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] \<bind> (\<lambda> outputs. S2_MPC2 (S_mpc2 (s,xb,yb)) (nth outputs 1))"
-  using MPC2_sec_P2[unfolded mpc2_2.perfect_security_def] assms by simp
+  shows "R2_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] 
+            = return_spmf (f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)]) 
+                \<bind> (\<lambda> outputs. S2_MPC2 (S_mpc2 (s,xb,yb)) (nth outputs 1))"
+  using MPC2_sec_P2[of xd yd s xb yb] assms mpc2_2.perfect_sec_views_equal[of "[D_mpc2 (xd, yd), S_mpc2 (s, xb, yb)]"] by auto
 
 lemma MPC2_2_all:
-  shows "\<forall> xd yd s xb yb. valid_inputs_mpc2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] \<longrightarrow> R2_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] = f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] \<bind> (\<lambda> outputs. S2_MPC2 (S_mpc2 (s,xb,yb)) (nth outputs 1))"
-  using MPC2_sec_P2[unfolded mpc2_2.perfect_security_def] valid_inputs_mpc2.simps by simp
+  shows "\<forall> xd yd s xb yb. valid_inputs_mpc2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)]  
+            \<longrightarrow> R2_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)] 
+                = return_spmf (f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)]) 
+                    \<bind> (\<lambda> outputs. S2_MPC2 (S_mpc2 (s,xb,yb)) (nth outputs 1))"
+  using MPC2_sec_P2[unfolded mpc2_2.perfect_security_def] valid_inputs_mpc2.simps MPC2_2 by blast
 
 lemma OT12_2_sec_all : 
   assumes "valid_inputs_ot12 [M2 (m0,m1), C1 \<sigma>]" 
-  shows "R2_OT12_1 [M2 (m0,m1), C1 \<sigma>] = f_ot12 [M2 (m0,m1), C1 \<sigma>] \<bind> (\<lambda> outputs. S2_OT12_1 (C1 \<sigma>) (nth outputs 1))"
+  shows "R2_OT12_1 [M2 (m0,m1), C1 \<sigma>] = return_spmf (f_ot12 [M2 (m0,m1), C1 \<sigma>]) \<bind> (\<lambda> outputs. S2_OT12_1 (C1 \<sigma>) (nth outputs 1))"
   using OT12_2_1 assms by fastforce
 
 lemma perfect_1_MPC1_unfold:
@@ -212,7 +222,7 @@ lemma perfect_2_MPC1_unfold:
   shows "mpc1_2.real_view [b, d]  = mpc1_2.ideal_view [b, d]"
   using MPC1_2[unfolded mpc1_2.perfect_security_def] assms by simp
 
-lemma OT12_correct_all: "\<forall> m0 m1 \<sigma>. valid_inputs_ot12 [M2 (m0,m1), C1 \<sigma>] \<longrightarrow> protocol_OT12 [M2 (m0,m1), C1 \<sigma>] = f_ot12 [M2 (m0,m1), C1 \<sigma>]" 
+lemma OT12_correct_all: "\<forall> m0 m1 \<sigma>. valid_inputs_ot12 [M2 (m0,m1), C1 \<sigma>] \<longrightarrow> protocol_OT12 [M2 (m0,m1), C1 \<sigma>] = return_spmf (f_ot12 [M2 (m0,m1), C1 \<sigma>])" 
   using OT12_correct[unfolded ot12.correctness_def] 
   by fastforce
 
@@ -221,9 +231,9 @@ lemma OT12_1_unfold:
   shows "R1_OT12_1 [M2 (m0,m1), C1 \<sigma>] = S1_OT12_1 (M2 (m0,m1)) (U_ot12 ())" 
   using OT12_1_1 assms by fastforce
 
-fun protocol_bid :: "nat list \<Rightarrow> ((nat \<times> bool) list) spmf"
+fun protocol_bid :: "nat list \<Rightarrow> ((nat \<times> bool option) list) spmf"
   where "protocol_bid [s, b, d] = do {
-    (view, outputs_mpc1) \<leftarrow> mpc1_1.real_view [b, d];
+    (input, view, outputs_mpc1) \<leftarrow> mpc1_1.real_view [b, d];
     let xb = (nth outputs_mpc1 0);
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
@@ -238,12 +248,12 @@ fun protocol_bid :: "nat list \<Rightarrow> ((nat \<times> bool) list) spmf"
     let yd = (rd + rd') mod q;
     outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
     _ :: unit \<leftarrow> assert_spmf (nth outputs_mpc2 0);
-    let out = ((yb + (q - yd)) mod q, (xb \<oplus> xd));
+    let out = ((yb + (q - yd)) mod q, Some (xb \<oplus> xd));
     return_spmf ([out, out, out])}"
 
 fun R_S_bid :: "nat list \<Rightarrow> (nat \<times> bool \<times> nat \<times> 'd \<times> bool \<times> nat) spmf"
   where "R_S_bid [s, b, d] = do {
-    (view, outputs_mpc1) \<leftarrow> mpc1_1.real_view [b, d];
+    (input, view, outputs_mpc1) \<leftarrow> mpc1_1.real_view [b, d];
     let xb = (nth outputs_mpc1 0);
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
@@ -272,15 +282,13 @@ definition S_S_bid :: "nat \<Rightarrow> (nat \<times> bool) \<Rightarrow> (nat 
     let rb' = rd';
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
-    outputs \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
+    let outputs = f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
     view \<leftarrow> S2_MPC2 (S_mpc2 (s, xb, yb)) (nth outputs 1);
     outputs_mpc2 \<leftarrow> protocol_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
     _ :: unit \<leftarrow> assert_spmf (nth outputs_mpc2 0);
     return_spmf (s, xb, yb, view, xd, yd)}"
 
 sublocale bid_prot_correct: semi_honest_det_correctness funct_bid protocol_bid valid_inputs_f_bid .
-
-sublocale bid_prot_S: semi_honest_det_security _ funct_bid valid_inputs_f_bid 0 R_S_bid S_S_bid   .
 
 lemma 44:
   assumes "xa < q" and "xb < q" and "wb < q" 
@@ -369,18 +377,20 @@ next
     by (metis assms(3) cong_def mod_if)
 qed
 
-lemma funct_bid_False_d_gt_b:
-  assumes "[(a, False), (e, False), (c, False)] \<in> set_spmf (funct_bid [s, b, d])"
-  shows "d > b"
-  using assms apply(auto simp add: Let_def)
-  apply(cases "\<not> s \<le> max b d") by auto
+(*lemma funct_bid_False_d_gt_b:
+  assumes "funct_bid [s, b, d] = [(a, Some False), (e, Some False), (c, Some False)]"
+    and "s \<le> max b d"
+  shows "d \<ge> b"
+  using assms apply(auto simp add: Let_def) sledgehammer
+
+  apply (simp add: not_le_imp_less)
 
 lemma funct_bid_False_d_le_b:
   assumes "[(a, True), (e, True), (c, True)] \<in> set_spmf (funct_bid [s, b, d])"
   shows "d \<le> b"
   using assms apply(auto simp add: Let_def) 
   by (smt ccSUP_bot linorder_not_le list.inject mem_simps(2) prod.inject singletonD)
-
+*)
 lemma 555:
   assumes "xa < q" and "xb < q" and "d < q"
   shows "((xa + (d + xb) mod q) mod q + q - (xa + xb) mod q) mod q = d"
@@ -407,7 +417,7 @@ qed
 
 lemma S_corrupt:
   assumes "s < q" "b < q" "d < q"
-  shows "R_S_bid [s, b, d] = funct_bid [s, b, d] \<bind> (\<lambda> outputs. S_S_bid s (nth outputs 0))"
+  shows "R_S_bid [s, b, d] = return_spmf (funct_bid [s, b, d]) \<bind> (\<lambda> outputs. S_S_bid s (nth outputs 0))"
 proof-
   note [simp] = Let_def
   have R_initial: "R_S_bid [s, b, d] = do {
@@ -2383,31 +2393,31 @@ lemma 2 [simp]:
   assumes "Max {b,d} < q" and "\<not> b \<ge> d"
     and "[x,y] \<in> set_spmf (f_MPC1 [b, d])" shows "\<not> (x = (\<not> y))"
   using assms by(auto)
-
+(*
 lemma correctness_reserve_not_met:
   assumes "Max {b,d} < q"
     and "Max {b,d} < s"
     and "s < q"
-  shows "protocol_bid [s, b, d] = funct_bid [s, b, d]"
+  shows "protocol_bid [s, b, d] = return_spmf (funct_bid [s, b, d])"
 proof-
   have [simp]: "b < q" "d < q" using assms by auto
   have "protocol_bid [s, b, d] = do {
-    (view, outputs_mpc1) \<leftarrow> mpc1_1.real_view [b, d];
+    (input, view, outputs_mpc1) \<leftarrow> mpc1_1.real_view [b, d];
     let xb = (nth outputs_mpc1 0);
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
+    let outputs = f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
+    let outputs' = f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);    
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
-    outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
+    let outputs_mpc2 = f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
     _ :: unit \<leftarrow> assert_spmf (nth outputs_mpc2 0);
-    let out = ((yb + (q - yd)) mod q, (xb \<oplus> xd));
+    let out = ((yb + (q - yd)) mod q, Some (xb \<oplus> xd));
     return_spmf ([out, out, out])}"
     apply(auto simp only: protocol_bid.simps Let_def)
    apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp?)+
@@ -2416,100 +2426,102 @@ proof-
     using  MPC2_correct[unfolded mpc2.correctness_def] assms
     by fastforce 
   also have "... = do {
-    (view, outputs_mpc1) \<leftarrow> mpc1_1.ideal_view [b, d];
+    (input, view, outputs_mpc1) \<leftarrow> mpc1_1.ideal_view [b, d];
     let xb = (nth outputs_mpc1 0);
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
+    let outputs = f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
+    let outputs' = f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);    
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
-    outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
+    let outputs_mpc2 = f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
     _ :: unit \<leftarrow> assert_spmf (nth outputs_mpc2 0);
-    let out = ((yb + (q - yd)) mod q, (xb \<oplus> xd));
+    let out = ((yb + (q - yd)) mod q, Some (xb \<oplus> xd));
     return_spmf ([out, out, out])}"
-    by(simp add: mpc1_sec_unfold assms)
+    using mpc1_sec_unfold assms 
+    using \<open>b < q\<close> \<open>d < q\<close> valid_inputs_mpc1.simps by presburger
   also have "... = do {
     outputs_mpc1 \<leftarrow> f_MPC1 [b, d];
     let xb = (nth outputs_mpc1 0);
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
+    let outputs = f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
+    let outputs' = f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);    
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
-    outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
+    let outputs_mpc2 = f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
     _ :: unit \<leftarrow> assert_spmf (nth outputs_mpc2 0);
-    let out = ((yb + (q - yd)) mod q, (xb \<oplus> xd));
+    let out = ((yb + (q - yd)) mod q, Some (xb \<oplus> xd));
     return_spmf ([out, out, out])}"
-    by(auto simp add: mpc1_1.ideal_view_def bind_spmf_const lossless_S1_MPC1 lossless_weight_spmfD)
+    unfolding  mpc1_1.ideal_view_def 
+    by(simp add: Let_def bind_spmf_const lossless_S1_MPC1 lossless_weight_spmfD split del: if_split) 
   also have "...  = do {
     outputs_mpc1 \<leftarrow> f_MPC1 [b, d];
     let xb = (nth outputs_mpc1 0);
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
+    let outputs = f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
+    let outputs' = f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);   
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
     _ :: unit \<leftarrow> assert_spmf False;
-    let out = ((yb + (q - yd)) mod q, (xb \<oplus> xd));
+    let out = ((yb + (q - yd)) mod q, Some (xb \<oplus> xd));
     return_spmf ([out, out, out])}"
     apply(auto simp only: Let_def)
     apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp?)+
-    subgoal for xa xb xc xd xe
-      apply(cases xe; cases "d \<le> b")
-      apply(auto simp add: q_gt_0) 
-      apply (metis "44" assms(2) Max.singleton Max_insert Nat.add_diff_assoc \<open>b < q\<close> assms(2) finite.intros(1) finite_insert linorder_not_le max.orderE mod_le_divisor q_gt_0)
+    subgoal for xa xb xc 
+      apply(cases "d \<le> b")
+       apply(auto simp add: q_gt_0) 
+        apply (metis "44" assms(2) Max.singleton Max_insert Nat.add_diff_assoc \<open>b < q\<close> assms(2) finite.intros(1) finite_insert linorder_not_le max.orderE mod_le_divisor q_gt_0)
       using "555" assms(2) apply simp
-      apply (metis "44" Max.singleton Max_insert Nat.add_diff_assoc \<open>b < q\<close> assms(2) finite.intros(1) finite_insert linorder_not_le max.orderE mod_le_divisor q_gt_0)
+       apply (metis "44" Max.singleton Max_insert Nat.add_diff_assoc \<open>b < q\<close> assms(2) finite.intros(1) finite_insert linorder_not_le max.orderE mod_le_divisor q_gt_0)
       using "555" assms(2) by simp
     done
-     also have "... = funct_bid [s, b, d]" 
-       apply(auto simp add:  Let_def; cases "s \<le> max b d") 
-       using assms by auto
-  ultimately show ?thesis by argo
-qed
-
-lemma correctness_reserve_met:
+  also have "... = return_spmf (funct_bid [s, b, d])" 
+    apply(auto simp add:  Let_def; cases "s \<le> max b d") 
+    using assms apply auto
+    ultimately show ?thesis by argo
+  qed
+*)
+(*lemma correctness_reserve_met:
   assumes "Max {b,d} < q"
     and "Max {b,d} \<ge> s"
     and "s < q"
-  shows "protocol_bid [s, b, d] = funct_bid [s, b, d]"
+  shows "protocol_bid [s, b, d] = return_spmf (funct_bid [s, b, d])"
 proof-
   have b: "b < q" and d: "d < q" using assms by auto
   have "protocol_bid [s, b, d] = do {
-    (view, outputs_mpc1) \<leftarrow> mpc1_1.real_view [b, d];
+    (input, view, outputs_mpc1) \<leftarrow> mpc1_1.real_view [b, d];
     let xb = (nth outputs_mpc1 0);
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
+    let outputs = f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
+    let outputs' = f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);    
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
-    outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
+    let outputs_mpc2 = f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
     _ :: unit \<leftarrow> assert_spmf (nth outputs_mpc2 0);
-    let out = ((yb + (q - yd)) mod q, (xb \<oplus> xd));
+    let out = ((yb + (q - yd)) mod q, Some (xb \<oplus> xd));
     return_spmf ([out, out, out])}"
     apply(auto simp only: protocol_bid.simps Let_def)
    apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp?)+
@@ -2518,43 +2530,45 @@ proof-
     using  MPC2_correct[unfolded mpc2.correctness_def] assms
     by fastforce 
   also have  "... = do {
-    (view, outputs_mpc1) \<leftarrow> mpc1_1.ideal_view [b, d];
+    (input, view, outputs_mpc1) \<leftarrow> mpc1_1.ideal_view [b, d];
     let xb = (nth outputs_mpc1 0);
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
+    let outputs = f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
+    let outputs' = f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);    
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
-    outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
+    let outputs_mpc2 = f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
     _ :: unit \<leftarrow> assert_spmf (nth outputs_mpc2 0);
-    let out = ((yb + (q - yd)) mod q, (xb \<oplus> xd));
+    let out = ((yb + (q - yd)) mod q, Some (xb \<oplus> xd));
     return_spmf ([out, out, out])}"
-    by(auto simp add: mpc1_sec_unfold b d)
+    using mpc1_sec_unfold assms 
+    using \<open>b < q\<close> \<open>d < q\<close> valid_inputs_mpc1.simps by presburger
   ultimately have prot_init: "protocol_bid [s, b, d] = do {
     outputs_mpc1 \<leftarrow> f_MPC1 [b, d];
     let xb = (nth outputs_mpc1 0);
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
+    let outputs = f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
+    let outputs' = f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1);    
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
-    outputs_mpc2 \<leftarrow> f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
+    let outputs_mpc2 = f_MPC2 [D_mpc2 (xd,yd), S_mpc2 (s,xb,yb)];
     _ :: unit \<leftarrow> assert_spmf (nth outputs_mpc2 0);
-    let out = ((yb + (q - yd)) mod q, (xb \<oplus> xd));
+    let out = ((yb + (q - yd)) mod q, Some (xb \<oplus> xd));
     return_spmf ([out, out, out])}"
-    by(auto simp add: mpc1_1.ideal_view_def bind_spmf_const lossless_S1_MPC1 lossless_weight_spmfD)
+    unfolding  mpc1_1.ideal_view_def 
+    by(simp add: Let_def bind_spmf_const lossless_S1_MPC1 lossless_weight_spmfD split del: if_split) 
   show ?thesis
   proof(cases "b \<ge> d")
     case b_ge_d: True
@@ -2564,18 +2578,18 @@ proof-
     let xd = (nth outputs_mpc1 1);
     rb :: nat \<leftarrow> sample_uniform q;
     let input1 = (if (xb = False) then (rb, (rb + (q - b)) mod q) else ((rb + (q - b)) mod q, rb));
-    outputs \<leftarrow> f_ot12 [M2 input1, C1 xd];
+    let outputs = f_ot12 [M2 input1, C1 xd];
     let rd = output_ot_rev (nth outputs 1);
     rd' :: nat \<leftarrow> sample_uniform q;
     let input1' = (if (xd = False) then ((d + rd') mod q, rd') else (rd', (d + rd') mod q));
-    outputs' \<leftarrow> f_ot12 [M2 input1', C1 xb]; 
+    let outputs' = f_ot12 [M2 input1', C1 xb]; 
     let rb' = output_ot_rev (nth outputs' 1); 
     let yb = (rb + rb') mod q;
     let yd = (rd + rd') mod q;
-    let out = ((yb + (q - yd)) mod q, (xb \<oplus> xd));
+    let out = ((yb + (q - yd)) mod q, Some (xb \<oplus> xd));
     return_spmf ([out, out, out])}"
       using prot_init
-      apply(auto simp add: Let_def)
+      apply(auto simp add: Let_def split del: if_split)
        apply(intro bind_spmf_cong bind_spmf_cong[OF refl]; clarsimp?)+
       subgoal for x xa xb xc xd
         apply(cases x)
@@ -2710,7 +2724,7 @@ proof-
       using False assms by argo
   qed
 qed
-
+*)
 theorem correctness:
   shows "bid_prot_correct.correctness [s, b, d]" 
   unfolding bid_prot_correct.correctness_def 

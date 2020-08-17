@@ -73,18 +73,6 @@ lemma ass_adv_14_OT: "\<bar>spmf (bind_spmf (ot14_1.ideal_view (M4 (m00, m01, m1
   using ot14_advantage_P1 unfolding ot14_1.advantage_def 
   by (simp add: abs_minus_commute)
 
-(*proof-
-  have "return_spmf (f_ot14 [M4 (m00, m01, m10, m11), C2 (c0,c1)]) \<bind> (\<lambda> outputs_ot. ot14_1.ideal_view (M4 (m00, m01, m10, m11)) (nth outputs_ot 0) \<bind> D) 
-          = ot14_1.real_view [M4 (m00, m01, m10, m11), C2 (c0,c1)] \<bind> D" 
-    unfolding ot14_1.real_view_def ot14_1.ideal_view_def 
-  thus ?thesis 
-    using ot14_advantage_P1[unfolded ot14_1.advantage_def, of m00 m01 m10 m11 c0 c1]
-
- unfolding ot14_1.real_view_def ot14_1.ideal_view_def 
-    apply (auto simp add: abs_minus_commute) 
-qed
-*)
-
 text \<open>The sharing scheme\<close>
 
 definition share :: "bool \<Rightarrow> share_wire spmf"
@@ -226,10 +214,7 @@ fun and_outputs_1 :: "gmw_inputs list \<Rightarrow> (bool \<times> 'ot14_view1) 
             let s3 = \<sigma> \<oplus> ((a1 \<oplus> True) \<and> (a2 \<oplus> True)); 
             outputs :: outputs_ot list \<leftarrow> protocol_ot14 [M4 (s0,s1,s2,s3), C2 (b1,b2)];
             return_spmf ([Q \<sigma>, K (nth outputs 1)])}" 
-            (*let s0 = \<sigma> \<oplus> ((a1 \<oplus> False) \<and> (a2 \<oplus> False));   
-            let s1 = \<sigma> \<oplus> ((a1 \<oplus> False) \<and> (a2 \<oplus> True));   
-            let s2 = \<sigma> \<oplus> ((a1 \<oplus> True) \<and> (a2 \<oplus> False));   
-            let s3 = \<sigma> \<oplus> ((a1 \<oplus> True) \<and> (a2 \<oplus> True)); *)
+
 fun and_outputs_2 :: "gmw_inputs list \<Rightarrow> ('ot14_view2 \<times> bool) \<Rightarrow> (gmw_outputs list) spmf"
   where "and_outputs_2 [A, B] view = do {
             let (v, s) = view;
@@ -351,44 +336,19 @@ fun S2_and :: "gmw_inputs \<Rightarrow> gmw_outputs \<Rightarrow> ('ot14_view2 \
 
 sublocale gmw_and_2: semi_honest_prob 1 and_funct and_outputs_2 and_R2 S2_and valid_inputs_and .
 
-(*lemma 1: "valid_inputs_ot14 inputs \<longrightarrow> R2_OT14 [M4 (m00, m01, m10, m11), C2 (c0, c1)] 
+lemma 1: " R2_OT14 [M4 (m00, m01, m10, m11), C2 (c0, c1)] 
               = return_spmf (f_ot14 [M4 (m00, m01, m10, m11), C2 (c0, c1)]) 
                   \<bind> (\<lambda> outputs. S2_OT14 (C2 (c0, c1)) (outputs ! 1))"
   using ot14_perfect_security_P2[of m00 m01 m10  m11 c0 c1] 
- using ot14_2.views_all[of "[M4 (m00, m01, m10, m11), C2 (c0, c1)]"] by auto 
-*)
+ using ot14_2.views_equal_all by auto 
 
-lemma "C2 (True, True) = (True, True)"
-
-lemma 
-
-"valid_inputs_ot14 [M4 (\<not> x, x, x, x), C2 (True, True)] \<longrightarrow>  R2_OT14 [M4 (\<not> x, x, x, x), C2 (True, True)] \<bind> (\<lambda>y :: 'ot14_view2 . return_spmf ((True, True), (y, x), [Q x, Q x])) =
-         S2_OT14 (C2 (True, True)) (P x) \<bind> (\<lambda>y. return_spmf ((True, True), (y, x), [Q x, Q x]))"
-  using ot14_perfect_security_P2[unfolded ot14_2.perfect_security_def ot14_2.ideal_view_def ot14_2.real_view_def, of "\<not> x" x x x True True]   apply auto apply(cases x) oops
-lemma and_perfect_security_P2: 
-
+lemma and_perfect_security_P2:
   shows "gmw_and_2.perfect_security [(a1,a2),(b1,b2)]"
   unfolding gmw_and_2.perfect_security_def gmw_and_2.real_view_def gmw_and_2.ideal_view_def
-using inf_th_14_OT_P4 apply auto 
-  apply(auto simp add: Let_def split_def)
-
-  using  ot14_perfect_security_P2 
-  apply(cases b1;cases b2; cases a1; cases a2; auto)
-                 apply(intro bind_spmf_cong[OF refl]; clarsimp?)+
-using ot14_correct_unfold inf_th_14_OT_P4 ot14_2.real_view_def ot14_2.ideal_view_def
-  (*using 1*) apply auto using  ot14_perfect_security_P2[unfolded ot14_2.perfect_security_def ot14_2.ideal_view_def ot14_2.real_view_def] 
-  subgoal for x using ot14_perfect_security_P2[unfolded ot14_2.perfect_security_def ot14_2.ideal_view_def ot14_2.real_view_def, of "\<not> x" x x x True True]
-apply auto apply(cases x) 
-
-
-
-  using ot14_correct_unfold inf_th_14_OT_P4 
-  apply(simp only:  ot14_2.real_view_def  ot14_2.ideal_view_def) 
-  apply(auto simp add: split_def Let_def)
-  apply(cases b1;cases b2; cases a1; cases a2; auto)
+  apply(auto simp add: Let_def)    
+  apply(intro bind_spmf_cong[OF refl]; clarsimp?)+ using 1
+  by(cases b1;cases b2; cases a1; cases a2; auto)
  
-                 apply(intro bind_spmf_cong[OF refl]; clarsimp?)+
-  using inf_th_14_OT_P4[unfolded ot14_2.real_view_def ot14_2.ideal_view_def] 
 end 
 
 locale gmw_asym = 
@@ -405,10 +365,12 @@ sublocale gmw "(R1_OT14 n)" "(S1_OT14 n)" "(R2_OT14 n)" "(S2_OT14 n)" "(protocol
   by (simp add: gmw)
 
 lemma "gmw_xor_1.perfect_security [s1, s2]"
-  using gmw_xor_1.perfect_security_def by(simp add: split_def S1_xor_def)
+  unfolding gmw_xor_1.perfect_security_def gmw_xor_1.real_view_def gmw_xor_1.ideal_view_def 
+  by(auto simp add: split_def S1_xor_def)
 
 lemma "gmw_xor_2.perfect_security [s1, s2]"
-  using gmw_xor_2.perfect_security_def by(simp add: split_def S2_xor_def)
+  unfolding gmw_xor_2.perfect_security_def gmw_xor_2.real_view_def gmw_xor_2.ideal_view_def 
+  by(auto simp add: split_def S2_xor_def)
 
 lemma and_advantage_P1:
   assumes "negligible (\<lambda> n. ot14_adv_P1 n)"
@@ -424,9 +386,6 @@ qed
 lemma "gmw_and_2.perfect_security n [(a1,a2),(b1,b2)]"
   by(rule and_perfect_security_P2)
 
-lemma "gmw_and_1.correctness n [(a1, b1), (a2,b2)]"
-  unfolding gmw_and_1.correctness_def
-  using and_correct by simp
 
 end
 

@@ -44,34 +44,30 @@ definition "perfect_security inputs \<equiv>
                 (valid_inputs inputs \<longrightarrow> real_view inputs 
                     = return_spmf (funct inputs) \<bind> (\<lambda> outputs. ideal_view (nth inputs i) (nth outputs i)))"
 
-lemma " R inputs \<bind> (\<lambda> view. return_spmf view) = S (inputs ! i) (funct inputs ! i) \<bind> (\<lambda> view. return_spmf view)
-\<longleftrightarrow>  R inputs = S (inputs ! i) (funct inputs ! i)"
-
-lemma assumes "A = B" shows "spmf A X  = spmf B X" using assms by simp
-
-lemma 1:  fixes inputs
+lemma view_equal:
   assumes 
-"R inputs \<bind> (\<lambda>view :: 'view. return_spmf (inputs ! i, view)) = S (inputs ! i) (funct inputs ! i) \<bind> (\<lambda>view. return_spmf (inputs ! i, view))"
-shows   "R inputs = S (input ! i) (funct inputs ! i)"
-  using assms oops
-
-(*proof(rule ccontr)
-  assume "\<not> (R inputs = S (input ! i) (funct inputs ! i))"
-  hence "x \<in> set_spmf (R inputs) \<longrightarrow> x \<notin> set_spmf (S (input ! i) (funct inputs ! i))" for x 
-  hence  "spmf (R inputs) X \<noteq> spmf (S (input ! i) (funct inputs ! i)) X" for  X 
-  hence "\<not> (R inputs \<bind> (\<lambda>view :: 'view. return_spmf (view)) = S (inputs ! i) (funct inputs ! i) \<bind> (\<lambda>view. return_spmf (view)))"
-
-  then show "False" using assms 
+    "R inputs \<bind> (\<lambda>view :: 'view. return_spmf (inputs ! i, view)) 
+      = S (inputs ! i) (funct inputs ! i) \<bind> (\<lambda>view. return_spmf (inputs ! i, view))"
+  shows "R inputs = S (inputs ! i) (funct inputs ! i)" 
+proof -
+  have "R inputs = map_spmf snd (R inputs \<bind> (\<lambda>view :: 'view. return_spmf (inputs ! i, view)))"
+    by(simp add: map_bind_spmf o_def)
+  also note assms
+  also have "map_spmf snd (S (inputs ! i) (funct inputs ! i) \<bind> (\<lambda>view. return_spmf (inputs ! i, view))) = S (inputs ! i) (funct inputs ! i)"
+    by(simp add: map_bind_spmf o_def)
+  finally show ?thesis .
 qed
-*)
+
+lemma perfect_sec_views_equal: 
+  shows "perfect_security inputs \<longrightarrow> valid_inputs inputs 
+             \<longrightarrow> R inputs  = return_spmf (funct inputs) \<bind> (\<lambda>  outputs. S (inputs ! i) (outputs ! i))"
+  unfolding perfect_security_def ideal_view_def real_view_def by(auto simp add: view_equal)
 
 
-(*lemma views: shows "perfect_security inputs \<longrightarrow> valid_inputs inputs \<longrightarrow> R inputs  
-                      = return_spmf (funct inputs) \<bind> (\<lambda>  outputs. S (input ! i) (outputs ! i))"
-  unfolding perfect_security_def ideal_view_def real_view_def apply auto using  1 by blast
-*)
-(*lemma views_all: shows "\<forall> inputs. perfect_security inputs \<longrightarrow> valid_inputs inputs \<longrightarrow> R inputs \<bind> (\<lambda> view. return_s  = return_spmf (funct inputs) \<bind> (\<lambda>  outputs. S (input ! i) (outputs ! i))"
-  using views by blast*)
+lemma views_equal_all: shows 
+"\<forall> inputs. perfect_security inputs \<longrightarrow> valid_inputs inputs \<longrightarrow> R inputs  = return_spmf (funct inputs) \<bind> (\<lambda>  outputs. S (inputs ! i) (outputs ! i))"
+  using perfect_sec_views_equal by blast
+
 lemma perfect_security_imp_advanage_0:
   assumes "valid_inputs inputs"
     and "perfect_security inputs" 
